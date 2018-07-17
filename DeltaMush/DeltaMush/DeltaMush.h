@@ -27,4 +27,8 @@ public:
 public:
 	static MString typeName;
 	static MTypeId typeId;
+
+	static MObject referenceMesh;
+	static MObject smoothingIterations;
+	static MObject smoothWeight;
 };
