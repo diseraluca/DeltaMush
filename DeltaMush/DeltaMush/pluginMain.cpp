@@ -11,10 +11,25 @@
 
 #include "DeltaMush.h"
 
+#include <maya/MFnPlugin.h>
+
 MStatus initializePlugin(MObject obj) {
+	MStatus status{};
+	MFnPlugin plugin{ obj, "Luca Di Sera", "1.0.0.0", "Any", &status };
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+
+	status = plugin.registerNode(DeltaMush::typeName, DeltaMush::typeId, DeltaMush::creator, DeltaMush::initialize, MPxNode::kDeformerNode);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+
 	return MStatus::kSuccess;
 }
 
 MStatus uninitializePlugin(MObject obj) {
+	MStatus status{};
+	MFnPlugin plugin{ obj };
+
+	status = plugin.deregisterNode(DeltaMush::typeId);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+
 	return MStatus::kSuccess;
 }

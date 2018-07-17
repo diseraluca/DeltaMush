@@ -11,9 +11,12 @@
 
 #include "DeltaMush.h"
 
+MString DeltaMush::typeName{ "ldsDeltaMush" };
+MTypeId DeltaMush::typeId{ 0xd1230a };
+
 void * DeltaMush::creator()
 {
-	return nullptr;
+	return new DeltaMush();
 }
 
 MStatus DeltaMush::initialize()
