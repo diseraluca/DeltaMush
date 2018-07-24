@@ -168,7 +168,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		MMatrix tangentSpaceMatrix{};
 		buildTangentSpaceMatrix(tangentSpaceMatrix, inputGeomTangents[vertexIndex], vertexNormal, binormal, meshSmoothedPositions[vertexIndex]);
 
-		resultPositions[vertexIndex] = tangentSpaceMatrix * (deltas[vertexIndex] * deltaWeightValue);
+		resultPositions[vertexIndex] += tangentSpaceMatrix * (deltas[vertexIndex] * deltaWeightValue);
 	}
 
 	iterator.setAllPositions(resultPositions);
