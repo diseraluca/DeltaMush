@@ -39,6 +39,7 @@ private:
 	MVector neighboursAveragePosition(const MPointArray& verticesPositions, const std::vector<MIntArray>& neighbours, unsigned int vertexIndex) const;
 
 	MStatus cacheDeltas(const MFnMesh& meshFn, const MPointArray& vertexPositions, const MPointArray& smoothedPositions, MVectorArray& out_deltas, unsigned int vertexCount) const;
+	MStatus applyDeltas(const MFnMesh& meshFn, const MPointArray& smoothedPositions, MVectorArray& deltas, MPointArray& out_positions, double weight, unsigned int vertexCount) const;
 	MStatus buildTangentSpaceMatrix(MMatrix& out_TangetSpaceMatrix, const MVector& tangent, const MVector& normal, const MVector& binormal, const MVector& translation) const;
 
 	MObject getInputGeom(MDataBlock& block, unsigned int multiIndex);

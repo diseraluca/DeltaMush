@@ -129,18 +129,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	MPointArray resultPositions{};
 	resultPositions.setLength(vertexCount);
 
-	// apply the delta
-	for (int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
-		MVector vertexNormal{};
-		inputGeomFn.getVertexNormal(vertexIndex, false, vertexNormal);
-
-		MVector binormal = vertexNormal ^ inputGeomTangents[vertexIndex];
-
-		MMatrix tangentSpaceMatrix{};
-		buildTangentSpaceMatrix(tangentSpaceMatrix, inputGeomTangents[vertexIndex], vertexNormal, binormal, meshSmoothedPositions[vertexIndex]);
-
-		resultPositions[vertexIndex] += tangentSpaceMatrix * (deltas[vertexIndex] * deltaWeightValue);
-	}
+	applyDeltas(inputGeomFn, meshSmoothedPositions, deltas, resultPositions, deltaWeightValue, vertexCount);
 
 	iterator.setAllPositions(resultPositions);
 
@@ -202,7 +191,7 @@ MStatus DeltaMush::cacheDeltas(const MFnMesh & meshFn, const MPointArray & verte
 	meshFn.getTangents(tangents);
 
 	out_deltas.setLength(vertexCount);
-	for (int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
+	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
 		MVector binormal = normals[vertexIndex] ^ tangents[vertexIndex];
 
 		// Build Tangent Space Matrix
@@ -211,6 +200,28 @@ MStatus DeltaMush::cacheDeltas(const MFnMesh & meshFn, const MPointArray & verte
 
 		// Calculate the displacementVector
 		out_deltas[vertexIndex] = tangentSpaceMatrix.inverse() * vertexPositions[vertexIndex];
+	}
+
+	return MStatus::kSuccess;
+}
+
+MStatus DeltaMush::applyDeltas(const MFnMesh & meshFn, const MPointArray & smoothedPositions, MVectorArray & deltas, MPointArray & out_positions, double weight, unsigned int vertexCount) const
+{
+	MFloatVectorArray normals{};
+	meshFn.getVertexNormals(false, normals);
+
+	MFloatVectorArray tangents{};
+	meshFn.getTangents(tangents);
+
+	out_positions.setLength(vertexCount);
+	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
+		MVector binormal = normals[vertexIndex] ^ tangents[vertexIndex];
+
+		// Build Tangent Space Matrix
+		MMatrix tangentSpaceMatrix{};
+		buildTangentSpaceMatrix(tangentSpaceMatrix, tangents[vertexIndex], normals[vertexIndex], binormal, smoothedPositions[vertexIndex]);
+
+		out_positions[vertexIndex] = ((tangentSpaceMatrix * deltas[vertexIndex]) * weight) + smoothedPositions[vertexIndex];
 	}
 
 	return MStatus::kSuccess;
