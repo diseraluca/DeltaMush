@@ -26,6 +26,7 @@ MTypeId DeltaMush::typeId{ 0xd1230a };
 MObject DeltaMush::referenceMesh;
 MObject DeltaMush::smoothingIterations;
 MObject DeltaMush::smoothWeight;
+MObject DeltaMush::deltaWeight;
 
 void * DeltaMush::creator()
 {
@@ -56,9 +57,17 @@ MStatus DeltaMush::initialize()
 	CHECK_MSTATUS(nAttr.setMax(1.0));
 	CHECK_MSTATUS(addAttribute(smoothWeight));
 
+	deltaWeight = nAttr.create("deltaWeight", "dlw", MFnNumericData::kDouble, 1.0, &status);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+	CHECK_MSTATUS(nAttr.setKeyable(true));
+	CHECK_MSTATUS(nAttr.setMin(0.0));
+	CHECK_MSTATUS(nAttr.setMax(1.0));
+	CHECK_MSTATUS(addAttribute(deltaWeight));
+
 	CHECK_MSTATUS(attributeAffects(referenceMesh, outputGeom));
 	CHECK_MSTATUS(attributeAffects(smoothingIterations, outputGeom));
 	CHECK_MSTATUS(attributeAffects(smoothWeight, outputGeom));
+	CHECK_MSTATUS(attributeAffects(deltaWeight, outputGeom));
 
 	MGlobal::executeCommand("makePaintable -attrType multiFloat -sm deformer ldsDeltaMush weights");
 
@@ -79,6 +88,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	MObject referenceMeshValue{ block.inputValue(referenceMesh).asMesh() };
 	int smoothingIterationsValue{ block.inputValue(smoothingIterations).asInt() };
 	double smoothWeightValue{ block.inputValue(smoothWeight).asDouble() };
+	double deltaWeightValue{ block.inputValue(deltaWeight).asDouble() };
 
 	int vertexCount{ iterator.count(&status) };
 	CHECK_MSTATUS_AND_RETURN_IT(status);
@@ -158,7 +168,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		MMatrix tangentSpaceMatrix{};
 		buildTangentSpaceMatrix(tangentSpaceMatrix, inputGeomTangents[vertexIndex], vertexNormal, binormal, meshSmoothedPositions[vertexIndex]);
 
-		resultPositions[vertexIndex] = tangentSpaceMatrix * deltas[vertexIndex];
+		resultPositions[vertexIndex] = tangentSpaceMatrix * (deltas[vertexIndex] * deltaWeightValue);
 	}
 
 	iterator.setAllPositions(resultPositions);

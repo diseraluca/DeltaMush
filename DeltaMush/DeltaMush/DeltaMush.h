@@ -42,4 +42,5 @@ public:
 	static MObject referenceMesh;
 	static MObject smoothingIterations;
 	static MObject smoothWeight;
+	static MObject deltaWeight;
 };
