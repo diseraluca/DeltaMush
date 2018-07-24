@@ -83,6 +83,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		return MStatus::kUnknownParameter;
 	}
 
+	// Retrieves attributes values
 	float envelopeValue{ block.inputValue(envelope).asFloat() };
 	MObject referenceMeshValue{ block.inputValue(referenceMesh).asMesh() };
 	int smoothingIterationsValue{ block.inputValue(smoothingIterations).asInt() };
@@ -92,44 +93,35 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	int vertexCount{ iterator.count(&status) };
 	CHECK_MSTATUS_AND_RETURN_IT(status);
 
+	// Retrieves the positions for the reference mesh
 	MFnMesh referenceMeshFn{ referenceMeshValue };
 	MPointArray referenceMeshVertexPositions{};
 	referenceMeshVertexPositions.setLength(vertexCount);
 	CHECK_MSTATUS_AND_RETURN_IT(referenceMeshFn.getPoints(referenceMeshVertexPositions));
 
+	// Build the neighbours array 
 	std::vector<MIntArray> referenceMeshNeighbours{};
-	referenceMeshNeighbours.resize(vertexCount);
-
 	getNeighbours(referenceMeshValue, referenceMeshNeighbours, vertexCount);
 
+	// Calculate the smoothed positions for the reference mesh
 	MPointArray referenceMeshSmoothedPositions{};
-	referenceMeshSmoothedPositions.setLength(vertexCount);
-
-	// Performs the smoothing
 	averageSmoothing(referenceMeshVertexPositions, referenceMeshSmoothedPositions, referenceMeshNeighbours, smoothingIterationsValue, smoothWeightValue);
 
+	// Calculate the deltas
 	MVectorArray deltas{};
-	//Calculate the deltas
 	cacheDeltas(referenceMeshFn, referenceMeshVertexPositions, referenceMeshSmoothedPositions, deltas, vertexCount);
 
-	MPointArray meshSmoothedPositions{};
-	meshSmoothedPositions.setLength(vertexCount);
 	MPointArray meshVertexPositions{};
 	iterator.allPositions(meshVertexPositions);
-	// Performs the smoothing
+
+	// Caculate the smoothed positions for the deformed mesh
+	MPointArray meshSmoothedPositions{};
 	averageSmoothing(meshVertexPositions, meshSmoothedPositions, referenceMeshNeighbours, smoothingIterationsValue, smoothWeightValue);
 
+	// Apply the deltas
 	MFnMesh inputGeomFn{ getInputGeom(block, multiIndex) };
-
-	MFloatVectorArray inputGeomBinormals{};
-	inputGeomFn.getBinormals(inputGeomBinormals);
-	MFloatVectorArray inputGeomTangents{};
-	inputGeomFn.getTangents(inputGeomTangents);
-
 	MPointArray resultPositions{};
-	resultPositions.setLength(vertexCount);
-
-	applyDeltas(inputGeomFn, meshSmoothedPositions, deltas, resultPositions, deltaWeightValue, vertexCount);
+	applyDeltas(inputGeomFn, meshSmoothedPositions, deltas, resultPositions, deltaWeightValue*envelopeValue, vertexCount);
 
 	iterator.setAllPositions(resultPositions);
 
@@ -153,6 +145,7 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 	unsigned int vertexCount{ verticesPositions.length() };
 	out_smoothedPositions.setLength(vertexCount);
 
+	// A copy is necessary to avoid losing the original data trough the computations while working iteratively on the smoothed positions
 	MPointArray verticesPositionsCopy{ verticesPositions };
 	for (unsigned int iterationIndex{ 0 }; iterationIndex < iterations; iterationIndex++) {
 		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
@@ -192,13 +185,14 @@ MStatus DeltaMush::cacheDeltas(const MFnMesh & meshFn, const MPointArray & verte
 
 	out_deltas.setLength(vertexCount);
 	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
+		// We use the cross product to calculate the binormal to ensure the orthogonality of the axis
 		MVector binormal = normals[vertexIndex] ^ tangents[vertexIndex];
 
 		// Build Tangent Space Matrix
 		MMatrix tangentSpaceMatrix{};
 		buildTangentSpaceMatrix(tangentSpaceMatrix, tangents[vertexIndex], normals[vertexIndex], binormal, smoothedPositions[vertexIndex]);
 
-		// Calculate the displacementVector
+		// Calculate the displacement Vector
 		out_deltas[vertexIndex] = tangentSpaceMatrix.inverse() * vertexPositions[vertexIndex];
 	}
 
@@ -215,12 +209,14 @@ MStatus DeltaMush::applyDeltas(const MFnMesh & meshFn, const MPointArray & smoot
 
 	out_positions.setLength(vertexCount);
 	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
+		// We use the cross product to calculate the binormal to ensure the orthogonality of the axis
 		MVector binormal = normals[vertexIndex] ^ tangents[vertexIndex];
 
 		// Build Tangent Space Matrix
 		MMatrix tangentSpaceMatrix{};
 		buildTangentSpaceMatrix(tangentSpaceMatrix, tangents[vertexIndex], normals[vertexIndex], binormal, smoothedPositions[vertexIndex]);
 
+		// Apply the tangent trasformation to the delta vector to find the final position
 		out_positions[vertexIndex] = ((tangentSpaceMatrix * deltas[vertexIndex]) * weight) + smoothedPositions[vertexIndex];
 	}
 
@@ -229,6 +225,7 @@ MStatus DeltaMush::applyDeltas(const MFnMesh & meshFn, const MPointArray & smoot
 
 MStatus DeltaMush::buildTangentSpaceMatrix(MMatrix & out_TangetSpaceMatrix, const MVector & tangent, const MVector & normal, const MVector & binormal, const MVector & translation) const
 {
+	// M = [tangent, normal, bitangent, translation(smoothedPosition]]
 	out_TangetSpaceMatrix[0][0] = tangent.x;
 	out_TangetSpaceMatrix[0][1] = tangent.y;
 	out_TangetSpaceMatrix[0][2] = tangent.z;
@@ -254,6 +251,7 @@ MStatus DeltaMush::buildTangentSpaceMatrix(MMatrix & out_TangetSpaceMatrix, cons
 
 MObject DeltaMush::getInputGeom(MDataBlock & block, unsigned int multiIndex)
 {
+	// We use outputValues to avoid the possibility of triggering the calculation of the node again
 	MArrayDataHandle inputHandle{ block.outputArrayValue(input) };
 	inputHandle.jumpToElement(multiIndex);
 	MObject inputGeomValue{ inputHandle.outputValue().child(inputGeom).asMesh() };
