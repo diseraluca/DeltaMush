@@ -17,12 +17,23 @@
 #pragma once
 
 #include <maya/MPxDeformerNode.h>
+#include <maya/MPointArray.h>
+#include <maya/MIntArray.h>
+#include <maya/MVector.h>
+
+#include <vector>
 
 class DeltaMush : public MPxDeformerNode {
 public:
 	static void*    creator();
 	static MStatus  initialize();
 	virtual MStatus deform(MDataBlock & block, MItGeometry & iterator, const MMatrix & matrix, unsigned int multiIndex) override;
+
+private:
+	MStatus averageSmoothing(const MPointArray& verticesPositions, MPointArray& out_smoothedPositions, const std::vector<MIntArray>& neighbours, unsigned int iterations, double weight);
+	MVector neighboursAveragePosition(const MPointArray& verticesPositions, const std::vector<MIntArray>& neighbours, unsigned int vertexIndex);
+
+	MStatus buildTangentSpaceMatrix(MMatrix& out_TangetSpaceMatrix, const MVector& tangent, const MVector& normal, const MVector& binormal, const MVector& translation) const;
 
 public:
 	static MString typeName;

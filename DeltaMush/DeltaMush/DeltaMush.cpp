@@ -16,13 +16,9 @@
 #include <maya/MGlobal.h>
 #include <maya/MItGeometry.h>
 #include <maya/MFnMesh.h>
-#include <maya/MPointArray.h>
-#include <maya/MIntArray.h>
 #include <maya/MItMeshVertex.h>
 #include <maya/MFloatVectorArray.h>
 #include <maya/MMatrix.h>
-
-#include <vector>
 
 MString DeltaMush::typeName{ "ldsDeltaMush" };
 MTypeId DeltaMush::typeId{ 0xd1230a };
@@ -105,18 +101,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	referenceMeshSmoothedPositions.setLength(vertexCount);
 
 	// Performs the smoothing
-	for (int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
-		MVector averagePosition{};
-
-		for (unsigned int neighbourIndex{ 0 }; neighbourIndex < referenceMeshNeighbours[vertexIndex].length(); neighbourIndex++) {
-			averagePosition += referenceMeshVertexPositions[referenceMeshNeighbours[vertexIndex][neighbourIndex]];
-		}
-
-		averagePosition /= referenceMeshNeighbours[vertexIndex].length();
-		MVector smoothedPosition = ((averagePosition - referenceMeshVertexPositions[vertexIndex] ) * smoothWeightValue) + referenceMeshVertexPositions[vertexIndex];
-
-		referenceMeshSmoothedPositions[vertexIndex] = smoothedPosition;
-	}
+	averageSmoothing(referenceMeshVertexPositions, referenceMeshSmoothedPositions, referenceMeshNeighbours, smoothingIterationsValue, smoothWeightValue);
 
 	MFloatVectorArray referenceMeshBinormals{};
 	referenceMeshFn.getBinormals(referenceMeshBinormals);
@@ -131,27 +116,11 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		MVector vertexNormal{};
 		referenceMeshFn.getVertexNormal(vertexIndex, false, vertexNormal);
 
+		MVector binormal = vertexNormal ^ referenceMeshTangents[vertexIndex];
+
 		// Build Tangent Space Matrix
 		MMatrix tangentSpaceMatrix{};
-		tangentSpaceMatrix[0][0] = referenceMeshTangents[vertexIndex].x;
-		tangentSpaceMatrix[0][1] = referenceMeshTangents[vertexIndex].y;
-		tangentSpaceMatrix[0][2] = referenceMeshTangents[vertexIndex].z;
-		tangentSpaceMatrix[0][3] = 0.0;
-
-		tangentSpaceMatrix[1][0] = vertexNormal.x;
-		tangentSpaceMatrix[1][1] = vertexNormal.y;
-		tangentSpaceMatrix[1][2] = vertexNormal.z;
-		tangentSpaceMatrix[1][3] = 0.0;
-
-		tangentSpaceMatrix[2][0] = referenceMeshBinormals[vertexIndex].x;
-		tangentSpaceMatrix[2][1] = referenceMeshBinormals[vertexIndex].y;
-		tangentSpaceMatrix[2][2] = referenceMeshBinormals[vertexIndex].z;
-		tangentSpaceMatrix[2][3] = 0.0;
-
-		tangentSpaceMatrix[3][0] = referenceMeshSmoothedPositions[vertexIndex].x;
-		tangentSpaceMatrix[3][1] = referenceMeshSmoothedPositions[vertexIndex].y;
-		tangentSpaceMatrix[3][2] = referenceMeshSmoothedPositions[vertexIndex].z;
-		tangentSpaceMatrix[3][3] = 1.0;
+		buildTangentSpaceMatrix(tangentSpaceMatrix, referenceMeshTangents[vertexIndex], vertexNormal, binormal, referenceMeshSmoothedPositions[vertexIndex]);
 
 		// Calculate the displacementVector
 		MVector delta{ tangentSpaceMatrix.inverse() * referenceMeshVertexPositions[vertexIndex] };
@@ -163,18 +132,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	MPointArray meshVertexPositions{};
 	iterator.allPositions(meshVertexPositions);
 	// Performs the smoothing
-	for (int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
-		MVector averagePosition{};
-
-		for (unsigned int neighbourIndex{ 0 }; neighbourIndex < referenceMeshNeighbours[vertexIndex].length(); neighbourIndex++) {
-			averagePosition += meshVertexPositions[referenceMeshNeighbours[vertexIndex][neighbourIndex]];
-		}
-
-		averagePosition /= referenceMeshNeighbours[vertexIndex].length();
-		MVector smoothedPosition = ((averagePosition - meshVertexPositions[vertexIndex]) * smoothWeightValue) + meshVertexPositions[vertexIndex];
-
-		meshSmoothedPositions[vertexIndex] = smoothedPosition;
-	}
+	averageSmoothing(meshVertexPositions, meshSmoothedPositions, referenceMeshNeighbours, smoothingIterationsValue, smoothWeightValue);
 
 	//Get the input geom
 	MArrayDataHandle inputHandle{ block.outputArrayValue(input) };
@@ -195,32 +153,74 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		MVector vertexNormal{};
 		inputGeomFn.getVertexNormal(vertexIndex, false, vertexNormal);
 
-		// Build Tangent Space Matrix
+		MVector binormal = vertexNormal ^ inputGeomTangents[vertexIndex];
+
 		MMatrix tangentSpaceMatrix{};
-		tangentSpaceMatrix[0][0] = inputGeomTangents[vertexIndex].x;
-		tangentSpaceMatrix[0][1] = inputGeomTangents[vertexIndex].y;
-		tangentSpaceMatrix[0][2] = inputGeomTangents[vertexIndex].z;
-		tangentSpaceMatrix[0][3] = 0.0;
-
-		tangentSpaceMatrix[1][0] = vertexNormal.x;
-		tangentSpaceMatrix[1][1] = vertexNormal.y;
-		tangentSpaceMatrix[1][2] = vertexNormal.z;
-		tangentSpaceMatrix[1][3] = 0.0;
-
-		tangentSpaceMatrix[2][0] = inputGeomBinormals[vertexIndex].x;
-		tangentSpaceMatrix[2][1] = inputGeomBinormals[vertexIndex].y;
-		tangentSpaceMatrix[2][2] = inputGeomBinormals[vertexIndex].z;
-		tangentSpaceMatrix[2][3] = 0.0;
-
-		tangentSpaceMatrix[3][0] = meshSmoothedPositions[vertexIndex].x;
-		tangentSpaceMatrix[3][1] = meshSmoothedPositions[vertexIndex].y;
-		tangentSpaceMatrix[3][2] = meshSmoothedPositions[vertexIndex].z;
-		tangentSpaceMatrix[3][3] = 1.0;
+		buildTangentSpaceMatrix(tangentSpaceMatrix, inputGeomTangents[vertexIndex], vertexNormal, binormal, meshSmoothedPositions[vertexIndex]);
 
 		resultPositions[vertexIndex] = tangentSpaceMatrix * deltas[vertexIndex];
 	}
 
 	iterator.setAllPositions(resultPositions);
+
+	return MStatus::kSuccess;
+}
+
+MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPointArray & out_smoothedPositions, const std::vector<MIntArray>& neighbours, unsigned int iterations, double weight)
+{
+	unsigned int vertexCount{ verticesPositions.length() };
+	out_smoothedPositions.setLength(vertexCount);
+
+	MPointArray verticesPositionsCopy{ verticesPositions };
+	for (unsigned int iterationIndex{ 0 }; iterationIndex < iterations; iterationIndex++) {
+		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
+			MVector averagePosition{ neighboursAveragePosition(verticesPositionsCopy, neighbours, vertexIndex) };
+			MVector smoothedPosition{ ((averagePosition - verticesPositionsCopy[vertexIndex]) * weight) + verticesPositionsCopy[vertexIndex] };
+
+			out_smoothedPositions[vertexIndex] = smoothedPosition;
+		}
+
+		verticesPositionsCopy.copy(out_smoothedPositions);
+	}
+
+	return MStatus::kSuccess;
+}
+
+MVector DeltaMush::neighboursAveragePosition(const MPointArray & verticesPositions, const std::vector<MIntArray>& neighbours, unsigned int vertexIndex)
+{
+	unsigned int neighbourCount{ neighbours[vertexIndex].length() };
+
+	MVector averagePosition{};
+	for (unsigned int neighbourIndex{ 0 }; neighbourIndex < neighbourCount; neighbourIndex++) {
+		averagePosition += verticesPositions[neighbours[vertexIndex][neighbourIndex]];
+	}
+
+	averagePosition /= neighbourCount;
+
+	return averagePosition;
+}
+
+MStatus DeltaMush::buildTangentSpaceMatrix(MMatrix & out_TangetSpaceMatrix, const MVector & tangent, const MVector & normal, const MVector & binormal, const MVector & translation) const
+{
+	out_TangetSpaceMatrix[0][0] = tangent.x;
+	out_TangetSpaceMatrix[0][1] = tangent.y;
+	out_TangetSpaceMatrix[0][2] = tangent.z;
+	out_TangetSpaceMatrix[0][3] = 0.0;
+
+	out_TangetSpaceMatrix[1][0] = normal.x;
+	out_TangetSpaceMatrix[1][1] = normal.y;
+	out_TangetSpaceMatrix[1][2] = normal.z;
+	out_TangetSpaceMatrix[1][3] = 0.0;
+
+	out_TangetSpaceMatrix[2][0] = binormal.x;
+	out_TangetSpaceMatrix[2][1] = binormal.y;
+	out_TangetSpaceMatrix[2][2] = binormal.z;
+	out_TangetSpaceMatrix[2][3] = 0.0;
+
+	out_TangetSpaceMatrix[3][0] = translation.x;
+	out_TangetSpaceMatrix[3][1] = translation.y;
+	out_TangetSpaceMatrix[3][2] = translation.z;
+	out_TangetSpaceMatrix[3][3] = 1.0;
 
 	return MStatus::kSuccess;
 }
