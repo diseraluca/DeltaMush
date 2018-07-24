@@ -22,6 +22,7 @@
 #include <maya/MPointArray.h>
 #include <maya/MIntArray.h>
 #include <maya/MVector.h>
+#include <maya/MFnMesh.h>
 
 #include <vector>
 
@@ -37,6 +38,7 @@ private:
 	MStatus averageSmoothing(const MPointArray& verticesPositions, MPointArray& out_smoothedPositions, const std::vector<MIntArray>& neighbours, unsigned int iterations, double weight) const;
 	MVector neighboursAveragePosition(const MPointArray& verticesPositions, const std::vector<MIntArray>& neighbours, unsigned int vertexIndex) const;
 
+	MStatus cacheDeltas(const MFnMesh& meshFn, const MPointArray& vertexPositions, const MPointArray& smoothedPositions, MVectorArray& out_deltas, unsigned int vertexCount) const;
 	MStatus buildTangentSpaceMatrix(MMatrix& out_TangetSpaceMatrix, const MVector& tangent, const MVector& normal, const MVector& binormal, const MVector& translation) const;
 
 	MObject getInputGeom(MDataBlock& block, unsigned int multiIndex);

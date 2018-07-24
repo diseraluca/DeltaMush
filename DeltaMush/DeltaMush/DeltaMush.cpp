@@ -15,7 +15,6 @@
 #include <maya/MFnNumericAttribute.h>
 #include <maya/MGlobal.h>
 #include <maya/MItGeometry.h>
-#include <maya/MFnMesh.h>
 #include <maya/MItMeshVertex.h>
 #include <maya/MFloatVectorArray.h>
 #include <maya/MMatrix.h>
@@ -109,29 +108,9 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	// Performs the smoothing
 	averageSmoothing(referenceMeshVertexPositions, referenceMeshSmoothedPositions, referenceMeshNeighbours, smoothingIterationsValue, smoothWeightValue);
 
-	MFloatVectorArray referenceMeshBinormals{};
-	referenceMeshFn.getBinormals(referenceMeshBinormals);
-	MFloatVectorArray referenceMeshTangents{};
-	referenceMeshFn.getTangents(referenceMeshTangents);
-
 	MVectorArray deltas{};
-	deltas.setLength( vertexCount );
-
 	//Calculate the deltas
-	for ( int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
-		MVector vertexNormal{};
-		referenceMeshFn.getVertexNormal(vertexIndex, false, vertexNormal);
-
-		MVector binormal = vertexNormal ^ referenceMeshTangents[vertexIndex];
-
-		// Build Tangent Space Matrix
-		MMatrix tangentSpaceMatrix{};
-		buildTangentSpaceMatrix(tangentSpaceMatrix, referenceMeshTangents[vertexIndex], vertexNormal, binormal, referenceMeshSmoothedPositions[vertexIndex]);
-
-		// Calculate the displacementVector
-		MVector delta{ tangentSpaceMatrix.inverse() * referenceMeshVertexPositions[vertexIndex] };
-		deltas[vertexIndex] = delta;
-	}
+	cacheDeltas(referenceMeshFn, referenceMeshVertexPositions, referenceMeshSmoothedPositions, deltas, vertexCount);
 
 	MPointArray meshSmoothedPositions{};
 	meshSmoothedPositions.setLength(vertexCount);
@@ -212,6 +191,29 @@ MVector DeltaMush::neighboursAveragePosition(const MPointArray & verticesPositio
 	averagePosition /= neighbourCount;
 
 	return averagePosition;
+}
+
+MStatus DeltaMush::cacheDeltas(const MFnMesh & meshFn, const MPointArray & vertexPositions, const MPointArray & smoothedPositions, MVectorArray & out_deltas, unsigned int vertexCount) const
+{
+	MFloatVectorArray normals{};
+	meshFn.getVertexNormals(false, normals);
+
+	MFloatVectorArray tangents{};
+	meshFn.getTangents(tangents);
+
+	out_deltas.setLength(vertexCount);
+	for (int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
+		MVector binormal = normals[vertexIndex] ^ tangents[vertexIndex];
+
+		// Build Tangent Space Matrix
+		MMatrix tangentSpaceMatrix{};
+		buildTangentSpaceMatrix(tangentSpaceMatrix, tangents[vertexIndex], normals[vertexIndex], binormal, smoothedPositions[vertexIndex]);
+
+		// Calculate the displacementVector
+		out_deltas[vertexIndex] = tangentSpaceMatrix.inverse() * vertexPositions[vertexIndex];
+	}
+
+	return MStatus::kSuccess;
 }
 
 MStatus DeltaMush::buildTangentSpaceMatrix(MMatrix & out_TangetSpaceMatrix, const MVector & tangent, const MVector & normal, const MVector & binormal, const MVector & translation) const
