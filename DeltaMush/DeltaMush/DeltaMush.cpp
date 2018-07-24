@@ -101,11 +101,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	std::vector<MIntArray> referenceMeshNeighbours{};
 	referenceMeshNeighbours.resize(vertexCount);
 
-	// Get the neighbours for the reference mesh
-	MItMeshVertex referenceMeshVtxIt{ referenceMeshValue };
-	for (int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++, referenceMeshVtxIt.next()) {
-		CHECK_MSTATUS_AND_RETURN_IT(referenceMeshVtxIt.getConnectedVertices(referenceMeshNeighbours[vertexIndex]));
-	}
+	getNeighbours(referenceMeshValue, referenceMeshNeighbours, vertexCount);
 
 	MPointArray referenceMeshSmoothedPositions{};
 	referenceMeshSmoothedPositions.setLength(vertexCount);
@@ -176,7 +172,19 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	return MStatus::kSuccess;
 }
 
-MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPointArray & out_smoothedPositions, const std::vector<MIntArray>& neighbours, unsigned int iterations, double weight)
+MStatus DeltaMush::getNeighbours(MObject & mesh, std::vector<MIntArray>& out_neighbours, unsigned int vertexCount) const
+{
+	out_neighbours.resize(vertexCount);
+
+	MItMeshVertex meshVtxIt{ mesh };
+	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++, meshVtxIt.next()) {
+		CHECK_MSTATUS_AND_RETURN_IT(meshVtxIt.getConnectedVertices(out_neighbours[vertexIndex]));
+	}
+
+	return MStatus::kSuccess;
+}
+
+MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPointArray & out_smoothedPositions, const std::vector<MIntArray>& neighbours, unsigned int iterations, double weight) const
 {
 	unsigned int vertexCount{ verticesPositions.length() };
 	out_smoothedPositions.setLength(vertexCount);
@@ -196,7 +204,7 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 	return MStatus::kSuccess;
 }
 
-MVector DeltaMush::neighboursAveragePosition(const MPointArray & verticesPositions, const std::vector<MIntArray>& neighbours, unsigned int vertexIndex)
+MVector DeltaMush::neighboursAveragePosition(const MPointArray & verticesPositions, const std::vector<MIntArray>& neighbours, unsigned int vertexIndex) const
 {
 	unsigned int neighbourCount{ neighbours[vertexIndex].length() };
 
