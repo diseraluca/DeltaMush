@@ -140,11 +140,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	// Performs the smoothing
 	averageSmoothing(meshVertexPositions, meshSmoothedPositions, referenceMeshNeighbours, smoothingIterationsValue, smoothWeightValue);
 
-	//Get the input geom
-	MArrayDataHandle inputHandle{ block.outputArrayValue(input) };
-	inputHandle.jumpToElement(multiIndex);
-	MObject inputGeomValue{ inputHandle.outputValue().child(inputGeom).asMesh() };
-	MFnMesh inputGeomFn{ inputGeomValue };
+	MFnMesh inputGeomFn{ getInputGeom(block, multiIndex) };
 
 	MFloatVectorArray inputGeomBinormals{};
 	inputGeomFn.getBinormals(inputGeomBinormals);
@@ -241,4 +237,13 @@ MStatus DeltaMush::buildTangentSpaceMatrix(MMatrix & out_TangetSpaceMatrix, cons
 	out_TangetSpaceMatrix[3][3] = 1.0;
 
 	return MStatus::kSuccess;
+}
+
+MObject DeltaMush::getInputGeom(MDataBlock & block, unsigned int multiIndex)
+{
+	MArrayDataHandle inputHandle{ block.outputArrayValue(input) };
+	inputHandle.jumpToElement(multiIndex);
+	MObject inputGeomValue{ inputHandle.outputValue().child(inputGeom).asMesh() };
+	
+	return inputGeomValue;
 }

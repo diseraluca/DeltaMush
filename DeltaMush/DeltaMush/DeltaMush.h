@@ -39,6 +39,8 @@ private:
 
 	MStatus buildTangentSpaceMatrix(MMatrix& out_TangetSpaceMatrix, const MVector& tangent, const MVector& normal, const MVector& binormal, const MVector& translation) const;
 
+	MObject getInputGeom(MDataBlock& block, unsigned int multiIndex);
+
 public:
 	static MString typeName;
 	static MTypeId typeId;
