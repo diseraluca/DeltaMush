@@ -109,7 +109,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 
 	// Calculate the deltas
 	MVectorArray deltas{};
-	cacheDeltas(referenceMeshFn, referenceMeshVertexPositions, referenceMeshSmoothedPositions, deltas, vertexCount);
+	cacheDeltas(referenceMeshVertexPositions, referenceMeshSmoothedPositions, referenceMeshNeighbours, deltas, vertexCount);
 
 	MPointArray meshVertexPositions{};
 	iterator.allPositions(meshVertexPositions);
@@ -175,25 +175,27 @@ MVector DeltaMush::neighboursAveragePosition(const MPointArray & verticesPositio
 	return averagePosition;
 }
 
-MStatus DeltaMush::cacheDeltas(const MFnMesh & meshFn, const MPointArray & vertexPositions, const MPointArray & smoothedPositions, MVectorArray & out_deltas, unsigned int vertexCount) const
+MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPointArray & smoothedPositions, const std::vector<MIntArray>& neighbours, MVectorArray & out_deltas, unsigned int vertexCount) const
 {
-	MFloatVectorArray normals{};
-	meshFn.getVertexNormals(false, normals);
-
-	MFloatVectorArray tangents{};
-	meshFn.getTangents(tangents);
-
 	out_deltas.setLength(vertexCount);
 	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
-		// We use the cross product to calculate the binormal to ensure the orthogonality of the axis
-		MVector binormal = normals[vertexIndex] ^ tangents[vertexIndex];
+		MVector delta{ vertexPositions[vertexIndex] - smoothedPositions[vertexIndex] };
 
-		// Build Tangent Space Matrix
-		MMatrix tangentSpaceMatrix{};
-		buildTangentSpaceMatrix(tangentSpaceMatrix, tangents[vertexIndex], normals[vertexIndex], binormal, smoothedPositions[vertexIndex]);
+		unsigned int neighbourIterations{ neighbours[vertexIndex].length() - 1 };
+		for (unsigned int neighbourIndex{ 0 }; neighbourIndex <= neighbourIterations; neighbourIndex++) {
+			MVector tangent = smoothedPositions[neighbours[vertexIndex][neighbourIndex]] - smoothedPositions[vertexIndex];
+			MVector neighbourVerctor = smoothedPositions[neighbours[vertexIndex][neighbourIndex + 1]] - smoothedPositions[vertexIndex];
 
-		// Calculate the displacement Vector
-		out_deltas[vertexIndex] = tangentSpaceMatrix.inverse() * vertexPositions[vertexIndex];
+			MVector normal{ tangent ^ neighbourVerctor };
+			MVector binormal{ tangent ^ normal };
+
+			// Build Tangent Space Matrix
+			MMatrix tangentSpaceMatrix{};
+			buildTangentSpaceMatrix(tangentSpaceMatrix, tangent, normal, binormal);
+
+			// Calculate the displacement Vector
+			out_deltas[vertexIndex] = tangentSpaceMatrix.inverse() * vertexPositions[vertexIndex];
+		}
 	}
 
 	return MStatus::kSuccess;
@@ -214,7 +216,7 @@ MStatus DeltaMush::applyDeltas(const MFnMesh & meshFn, const MPointArray & smoot
 
 		// Build Tangent Space Matrix
 		MMatrix tangentSpaceMatrix{};
-		buildTangentSpaceMatrix(tangentSpaceMatrix, tangents[vertexIndex], normals[vertexIndex], binormal, smoothedPositions[vertexIndex]);
+		buildTangentSpaceMatrix(tangentSpaceMatrix, tangents[vertexIndex], normals[vertexIndex], binormal);
 
 		// Apply the tangent trasformation to the delta vector to find the final position
 		out_positions[vertexIndex] = ((tangentSpaceMatrix * deltas[vertexIndex]) * weight) + smoothedPositions[vertexIndex];
@@ -223,7 +225,7 @@ MStatus DeltaMush::applyDeltas(const MFnMesh & meshFn, const MPointArray & smoot
 	return MStatus::kSuccess;
 }
 
-MStatus DeltaMush::buildTangentSpaceMatrix(MMatrix & out_TangetSpaceMatrix, const MVector & tangent, const MVector & normal, const MVector & binormal, const MVector & translation) const
+MStatus DeltaMush::buildTangentSpaceMatrix(MMatrix & out_TangetSpaceMatrix, const MVector & tangent, const MVector & normal, const MVector & binormal) const
 {
 	// M = [tangent, normal, bitangent, translation(smoothedPosition]]
 	out_TangetSpaceMatrix[0][0] = tangent.x;
@@ -241,9 +243,9 @@ MStatus DeltaMush::buildTangentSpaceMatrix(MMatrix & out_TangetSpaceMatrix, cons
 	out_TangetSpaceMatrix[2][2] = binormal.z;
 	out_TangetSpaceMatrix[2][3] = 0.0;
 
-	out_TangetSpaceMatrix[3][0] = translation.x;
-	out_TangetSpaceMatrix[3][1] = translation.y;
-	out_TangetSpaceMatrix[3][2] = translation.z;
+	out_TangetSpaceMatrix[3][0] = 0.0;
+	out_TangetSpaceMatrix[3][1] = 0.0;
+	out_TangetSpaceMatrix[3][2] = 0.0;
 	out_TangetSpaceMatrix[3][3] = 1.0;
 
 	return MStatus::kSuccess;
