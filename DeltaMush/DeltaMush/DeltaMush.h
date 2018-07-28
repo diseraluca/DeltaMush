@@ -26,6 +26,12 @@
 
 #include <vector>
 
+struct deltaCache {
+public:
+	MVectorArray deltas;
+	double deltaMagnitude;
+};
+
 class DeltaMush : public MPxDeformerNode {
 public:
 	static void*    creator();
@@ -43,14 +49,11 @@ private:
 	MVector neighboursAveragePosition(const MPointArray& verticesPositions, const std::vector<MIntArray>& neighbours, unsigned int vertexIndex) const;
 
 	// Calculate the tangent space deltas between the smoothed positions and the original positions and stores them in out_deltas.
-	MStatus cacheDeltas(const MPointArray& vertexPositions, const MPointArray& smoothedPositions, const std::vector<MIntArray>& neighbours, MVectorArray& out_deltas, unsigned int vertexCount) const;
+	MStatus cacheDeltas(const MPointArray& vertexPositions, const MPointArray& smoothedPositions, const std::vector<MIntArray>& neighbours, std::vector<deltaCache>& out_deltas, unsigned int vertexCount) const;
 
 	// Calculate a per-vertex tangent space and apply the delta per-vertex to find the final position that is stored in out_positions
-	MStatus applyDeltas(const MFnMesh& meshFn, const MPointArray& smoothedPositions, MVectorArray& deltas, MPointArray& out_positions, double weight, unsigned int vertexCount) const;
+	MStatus applyDeltas(const MPointArray& smoothedPositions, const std::vector<MIntArray>& neighbours, std::vector<deltaCache>& deltas, MPointArray& out_resultPositions, unsigned int vertexCount, double weight) const;
 	MStatus buildTangentSpaceMatrix(MMatrix& out_TangetSpaceMatrix, const MVector& tangent, const MVector& normal, const MVector& binormal) const;
-
-	// Safely get and MObject handle to the inputGeom[multiIndex] attribute 
-	MObject getInputGeom(MDataBlock& block, unsigned int multiIndex);
 
 public:
 	static MString typeName;
