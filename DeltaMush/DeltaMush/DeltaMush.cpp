@@ -191,7 +191,7 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 			neighbourVerctor.normalize();
 
 			MVector binormal{ tangent ^ neighbourVerctor };
-			MVector normal{ tangent ^ normal };
+			MVector normal{ tangent ^ binormal };
 
 			// Build Tangent Space Matrix
 			MMatrix tangentSpaceMatrix{};
@@ -221,7 +221,7 @@ MStatus DeltaMush::applyDeltas(const MPointArray & smoothedPositions, const std:
 			neighbourVerctor.normalize();
 
 			MVector binormal{ tangent ^ neighbourVerctor };
-			MVector normal{ tangent ^ normal };
+			MVector normal{ tangent ^ binormal };
 
 			// Build Tangent Space Matrix
 			MMatrix tangentSpaceMatrix{};
