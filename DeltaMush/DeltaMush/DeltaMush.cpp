@@ -151,6 +151,12 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		delta = delta.normal() * (deltas[vertexIndex].deltaMagnitude * deltaWeightValue);
 
 		resultPositions[vertexIndex] = meshSmoothedPositions[vertexIndex] + delta;
+
+		// We calculate the new definitive delta and apply the remaining scaling factors to it
+		delta = resultPositions[vertexIndex] - meshVertexPositions[vertexIndex];
+
+		float vertexWeight{ weightValue(block, multiIndex, vertexIndex) };
+		resultPositions[vertexIndex] = meshVertexPositions[vertexIndex] + (delta * vertexWeight * envelopeValue);
 	}
 
 	iterator.setAllPositions(resultPositions);
