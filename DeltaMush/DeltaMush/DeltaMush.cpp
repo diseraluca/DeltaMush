@@ -120,7 +120,38 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 
 	// Apply the deltas
 	MPointArray resultPositions{};
-	applyDeltas(meshSmoothedPositions, referenceMeshNeighbours, deltas, resultPositions, vertexCount, deltaWeightValue);
+	resultPositions.setLength(vertexCount);
+
+	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
+		MVector delta{};
+
+		unsigned int neighbourIterations{ referenceMeshNeighbours[vertexIndex].length() - 1 };
+		for (unsigned int neighbourIndex{ 0 }; neighbourIndex < neighbourIterations; neighbourIndex++) {
+			MVector tangent = meshSmoothedPositions[referenceMeshNeighbours[vertexIndex][neighbourIndex]] - meshSmoothedPositions[vertexIndex];
+			MVector neighbourVerctor = meshSmoothedPositions[referenceMeshNeighbours[vertexIndex][neighbourIndex + 1]] - meshSmoothedPositions[vertexIndex];
+
+			tangent.normalize();
+			neighbourVerctor.normalize();
+
+			MVector binormal{ tangent ^ neighbourVerctor };
+			MVector normal{ tangent ^ binormal };
+
+			// Build Tangent Space Matrix
+			MMatrix tangentSpaceMatrix{};
+			buildTangentSpaceMatrix(tangentSpaceMatrix, tangent, normal, binormal);
+
+			// Accumulate the displacement Vectors
+			delta += tangentSpaceMatrix * deltas[vertexIndex].deltas[neighbourIndex];
+		}
+
+		// Averaging the delta
+		delta /= static_cast<double>(neighbourIterations);
+
+		// Scaling the delta
+		delta = delta.normal() * (deltas[vertexIndex].deltaMagnitude * deltaWeightValue);
+
+		resultPositions[vertexIndex] = meshSmoothedPositions[vertexIndex] + delta;
+	}
 
 	iterator.setAllPositions(resultPositions);
 
@@ -200,44 +231,6 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 			// Calculate the displacement Vector
 			out_deltas[vertexIndex].deltas[neighbourIndex] = tangentSpaceMatrix.inverse() * delta;
 		}
-	}
-
-	return MStatus::kSuccess;
-}
-
-MStatus DeltaMush::applyDeltas(const MPointArray & smoothedPositions, const std::vector<MIntArray>& neighbours, std::vector<deltaCache> & deltas, MPointArray& out_resultPositions, unsigned int vertexCount, double weight) const
-{
-	out_resultPositions.setLength(vertexCount);
-
-	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
-		MVector delta{};
-
-		unsigned int neighbourIterations{ neighbours[vertexIndex].length() - 1 };
-		for (unsigned int neighbourIndex{ 0 }; neighbourIndex < neighbourIterations; neighbourIndex++) {
-			MVector tangent = smoothedPositions[neighbours[vertexIndex][neighbourIndex]] - smoothedPositions[vertexIndex];
-			MVector neighbourVerctor = smoothedPositions[neighbours[vertexIndex][neighbourIndex + 1]] - smoothedPositions[vertexIndex];
-
-			tangent.normalize();
-			neighbourVerctor.normalize();
-
-			MVector binormal{ tangent ^ neighbourVerctor };
-			MVector normal{ tangent ^ binormal };
-
-			// Build Tangent Space Matrix
-			MMatrix tangentSpaceMatrix{};
-			buildTangentSpaceMatrix(tangentSpaceMatrix, tangent, normal, binormal);
-
-			// Accumulate the displacement Vectors
-			delta += tangentSpaceMatrix * deltas[vertexIndex].deltas[neighbourIndex];
-		}
-
-		// Averaging the delta
-		delta /= static_cast<double>(neighbourIterations);
-
-		// Scaling the delta
-		delta = delta.normal() * (deltas[vertexIndex].deltaMagnitude * weight);
-
-		out_resultPositions[vertexIndex] = smoothedPositions[vertexIndex] + delta;
 	}
 
 	return MStatus::kSuccess;

@@ -50,9 +50,6 @@ private:
 
 	// Calculate the tangent space deltas between the smoothed positions and the original positions and stores them in out_deltas.
 	MStatus cacheDeltas(const MPointArray& vertexPositions, const MPointArray& smoothedPositions, const std::vector<MIntArray>& neighbours, std::vector<deltaCache>& out_deltas, unsigned int vertexCount) const;
-
-	// Calculate a per-vertex tangent space and apply the delta per-vertex to find the final position that is stored in out_positions
-	MStatus applyDeltas(const MPointArray& smoothedPositions, const std::vector<MIntArray>& neighbours, std::vector<deltaCache>& deltas, MPointArray& out_resultPositions, unsigned int vertexCount, double weight) const;
 	MStatus buildTangentSpaceMatrix(MMatrix& out_TangetSpaceMatrix, const MVector& tangent, const MVector& normal, const MVector& binormal) const;
 
 public:
