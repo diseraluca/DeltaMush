@@ -66,4 +66,7 @@ public:
 
 private:
 	bool isInitialized;
+
+	std::vector<MIntArray> referenceMeshNeighbours{};
+	std::vector<deltaCache> deltas{};
 };

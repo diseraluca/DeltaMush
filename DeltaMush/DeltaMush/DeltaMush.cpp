@@ -101,27 +101,31 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	int smoothingIterationsValue{ block.inputValue(smoothingIterations).asInt() };
 	double smoothWeightValue{ block.inputValue(smoothWeight).asDouble() };
 	double deltaWeightValue{ block.inputValue(deltaWeight).asDouble() };
+	bool rebindMeshValue{ block.inputValue(rebindMesh).asBool() };
 
 	int vertexCount{ iterator.count(&status) };
 	CHECK_MSTATUS_AND_RETURN_IT(status);
 
-	// Retrieves the positions for the reference mesh
-	MFnMesh referenceMeshFn{ referenceMeshValue };
-	MPointArray referenceMeshVertexPositions{};
-	referenceMeshVertexPositions.setLength(vertexCount);
-	CHECK_MSTATUS_AND_RETURN_IT(referenceMeshFn.getPoints(referenceMeshVertexPositions));
+	
+	if (rebindMeshValue || !isInitialized) {
+		// Retrieves the positions for the reference mesh
+		MFnMesh referenceMeshFn{ referenceMeshValue };
+		MPointArray referenceMeshVertexPositions{};
+		referenceMeshVertexPositions.setLength(vertexCount);
+		CHECK_MSTATUS_AND_RETURN_IT(referenceMeshFn.getPoints(referenceMeshVertexPositions));
 
-	// Build the neighbours array 
-	std::vector<MIntArray> referenceMeshNeighbours{};
-	getNeighbours(referenceMeshValue, referenceMeshNeighbours, vertexCount);
+		// Build the neighbours array 
+		getNeighbours(referenceMeshValue, referenceMeshNeighbours, vertexCount);
 
-	// Calculate the smoothed positions for the reference mesh
-	MPointArray referenceMeshSmoothedPositions{};
-	averageSmoothing(referenceMeshVertexPositions, referenceMeshSmoothedPositions, referenceMeshNeighbours, smoothingIterationsValue, smoothWeightValue);
+		// Calculate the smoothed positions for the reference mesh
+		MPointArray referenceMeshSmoothedPositions{};
+		averageSmoothing(referenceMeshVertexPositions, referenceMeshSmoothedPositions, referenceMeshNeighbours, smoothingIterationsValue, smoothWeightValue);
 
-	// Calculate the deltas
-	std::vector<deltaCache> deltas{};
-	cacheDeltas(referenceMeshVertexPositions, referenceMeshSmoothedPositions, referenceMeshNeighbours, deltas, vertexCount);
+		// Calculate the deltas
+		cacheDeltas(referenceMeshVertexPositions, referenceMeshSmoothedPositions, referenceMeshNeighbours, deltas, vertexCount);
+
+		isInitialized = true;
+	}
 
 	MPointArray meshVertexPositions{};
 	iterator.allPositions(meshVertexPositions);
@@ -134,7 +138,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	MPointArray resultPositions{};
 	resultPositions.setLength(vertexCount);
 
-	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
+	for (int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
 		MVector delta{};
 
 		unsigned int neighbourIterations{ referenceMeshNeighbours[vertexIndex].length() - 1 };
