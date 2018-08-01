@@ -116,26 +116,24 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 {
 	MStatus status{};
 
-	MPlug referenceMeshPlug{ thisMObject(), referenceMesh };
-	if (!referenceMeshPlug.isConnected()) {
-		MGlobal::displayWarning(this->name() + ": referenceMesh is not connected. Please connect a mesh");
-		return MStatus::kUnknownParameter;
-	}
-
 	// Retrieves attributes values
-	float envelopeValue{ block.inputValue(envelope).asFloat() };
-	MObject referenceMeshValue{ block.inputValue(referenceMesh).asMesh() };
+	bool rebindMeshValue{ block.inputValue(rebindMesh).asBool() };
 	int smoothingIterationsValue{ block.inputValue(smoothingIterations).asInt() };
 	double smoothWeightValue{ block.inputValue(smoothWeight).asDouble() };
-	double deltaWeightValue{ block.inputValue(deltaWeight).asDouble() };
-	bool rebindMeshValue{ block.inputValue(rebindMesh).asBool() };
 
 	int vertexCount{ iterator.count(&status) };
 	CHECK_MSTATUS_AND_RETURN_IT(status);
 
 	
 	if (rebindMeshValue || !isInitialized) {
+		MPlug referenceMeshPlug{ thisMObject(), referenceMesh };
+		if (!referenceMeshPlug.isConnected()) {
+			MGlobal::displayWarning(this->name() + ": referenceMesh is not connected. Please connect a mesh");
+			return MStatus::kUnknownParameter;
+		}
+
 		// Retrieves the positions for the reference mesh
+		MObject referenceMeshValue{ block.inputValue(referenceMesh).asMesh() };
 		MFnMesh referenceMeshFn{ referenceMeshValue };
 		MPointArray referenceMeshVertexPositions{};
 		referenceMeshVertexPositions.setLength(vertexCount);
@@ -153,6 +151,9 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 
 		isInitialized = true;
 	}
+
+	float envelopeValue{ block.inputValue(envelope).asFloat() };
+	double deltaWeightValue{ block.inputValue(deltaWeight).asDouble() };
 
 	MPointArray meshVertexPositions{};
 	iterator.allPositions(meshVertexPositions);
