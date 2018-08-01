@@ -28,6 +28,11 @@ MObject DeltaMush::smoothingIterations;
 MObject DeltaMush::smoothWeight;
 MObject DeltaMush::deltaWeight;
 
+DeltaMush::DeltaMush()
+	:isInitialized{ false }
+{
+}
+
 void * DeltaMush::creator()
 {
 	return new DeltaMush();

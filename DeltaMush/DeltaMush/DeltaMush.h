@@ -34,6 +34,8 @@ public:
 
 class DeltaMush : public MPxDeformerNode {
 public:
+	DeltaMush();
+
 	static void*    creator();
 	static MStatus  initialize();
 	virtual MStatus deform(MDataBlock & block, MItGeometry & iterator, const MMatrix & matrix, unsigned int multiIndex) override;
@@ -61,4 +63,7 @@ public:
 	static MObject smoothingIterations;
 	static MObject smoothWeight;
 	static MObject deltaWeight;
+
+private:
+	bool isInitialized;
 };
