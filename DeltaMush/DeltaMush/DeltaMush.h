@@ -44,16 +44,16 @@ public:
 
 private:
 	// Get the neighbours vertices per-vertex of mesh. The neighbours indexes are stored into out_neighbours
-	MStatus getNeighbours(MObject& mesh, std::vector<MIntArray>& out_neighbours, unsigned int vertexCount) const;
+	MStatus getNeighbours(MObject& mesh, unsigned int vertexCount);
 
 	// Perform an average neighbour smoothing on the vertices in vertices position and stores the smoothedPositions in out_smoothedPositions.
-	MStatus averageSmoothing(const MPointArray& verticesPositions, MPointArray& out_smoothedPositions, const std::vector<MIntArray>& neighbours, unsigned int iterations, double weight) const;
+	MStatus averageSmoothing(const MPointArray& verticesPositions, MPointArray& out_smoothedPositions, unsigned int iterations, double weight) const;
 
 	// Calculates and return an MVector representing the average positions of the neighbours vertices of the vertex with ID = vertexIndex 
-	MVector neighboursAveragePosition(const MPointArray& verticesPositions, const std::vector<MIntArray>& neighbours, unsigned int vertexIndex) const;
+	MVector neighboursAveragePosition(const MPointArray& verticesPositions, unsigned int vertexIndex) const;
 
 	// Calculate the tangent space deltas between the smoothed positions and the original positions and stores them in out_deltas.
-	MStatus cacheDeltas(const MPointArray& vertexPositions, const MPointArray& smoothedPositions, const std::vector<MIntArray>& neighbours, std::vector<deltaCache>& out_deltas, unsigned int vertexCount) const;
+	MStatus cacheDeltas(const MPointArray& vertexPositions, const MPointArray& smoothedPositions, unsigned int vertexCount);
 	MStatus buildTangentSpaceMatrix(MMatrix& out_TangetSpaceMatrix, const MVector& tangent, const MVector& normal, const MVector& binormal) const;
 
 public:
@@ -69,6 +69,6 @@ public:
 private:
 	bool isInitialized;
 
-	std::vector<MIntArray> referenceMeshNeighbours{};
+	std::vector<MIntArray> neighbours{};
 	std::vector<deltaCache> deltas{};
 };
