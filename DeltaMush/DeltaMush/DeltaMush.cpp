@@ -18,6 +18,7 @@
 #include <maya/MItMeshVertex.h>
 #include <maya/MFloatVectorArray.h>
 #include <maya/MMatrix.h>
+#include <maya/MEvaluationNode.h>
 
 MString DeltaMush::typeName{ "ldsDeltaMush" };
 MTypeId DeltaMush::typeId{ 0xd1230a };
@@ -81,6 +82,32 @@ MStatus DeltaMush::initialize()
 	CHECK_MSTATUS(attributeAffects(deltaWeight, outputGeom));
 
 	MGlobal::executeCommand("makePaintable -attrType multiFloat -sm deformer ldsDeltaMush weights");
+
+	return MStatus::kSuccess;
+}
+
+MStatus DeltaMush::setDependentsDirty(const MPlug & plug, MPlugArray & plugArray)
+{
+	if (plug == smoothingIterations || plug == referenceMesh) {
+		isInitialized = false;
+	}
+
+	return MPxNode::setDependentsDirty(plug, plugArray);
+}
+
+MStatus DeltaMush::preEvaluation(const MDGContext & context, const MEvaluationNode & evaluationNode)
+{
+	MStatus status{};
+
+	if (!context.isNormal()) {
+		return MStatus::kFailure;
+	}
+
+	if ((evaluationNode.dirtyPlugExists(smoothingIterations, &status) && status) ||
+		(evaluationNode.dirtyPlugExists(referenceMesh, &status) && status)) 
+	{
+		isInitialized = false;
+	}
 
 	return MStatus::kSuccess;
 }
