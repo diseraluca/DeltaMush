@@ -26,12 +26,6 @@
 
 #include <vector>
 
-struct deltaCache {
-public:
-	MVectorArray deltas;
-	double deltaMagnitude;
-};
-
 class DeltaMush : public MPxDeformerNode {
 public:
 	DeltaMush();
@@ -70,5 +64,7 @@ private:
 	bool isInitialized;
 
 	std::vector<MIntArray> neighbours{};
-	std::vector<deltaCache> deltas{};
+	std::vector<MVectorArray> deltas;
+	std::vector<double> deltaMagnitudes;
+
 };

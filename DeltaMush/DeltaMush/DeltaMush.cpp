@@ -30,7 +30,10 @@ MObject DeltaMush::smoothWeight;
 MObject DeltaMush::deltaWeight;
 
 DeltaMush::DeltaMush()
-	:isInitialized{ false }
+	:isInitialized{ false },
+	 neighbours{},
+	 deltas{},
+	 deltaMagnitudes{}
 {
 }
 
@@ -185,14 +188,14 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 			buildTangentSpaceMatrix(tangentSpaceMatrix, tangent, normal, binormal);
 
 			// Accumulate the displacement Vectors
-			delta += tangentSpaceMatrix * deltas[vertexIndex].deltas[neighbourIndex];
+			delta += tangentSpaceMatrix * deltas[vertexIndex][neighbourIndex];
 		}
 
 		// Averaging the delta
 		delta /= static_cast<double>(neighbourIterations);
 
 		// Scaling the delta
-		delta = delta.normal() * (deltas[vertexIndex].deltaMagnitude * deltaWeightValue);
+		delta = delta.normal() * (deltaMagnitudes[vertexIndex] * deltaWeightValue);
 
 		resultPositions[vertexIndex] = meshSmoothedPositions[vertexIndex] + delta;
 
@@ -258,12 +261,14 @@ MVector DeltaMush::neighboursAveragePosition(const MPointArray & verticesPositio
 MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPointArray & smoothedPositions, unsigned int vertexCount)
 {
 	deltas.resize(vertexCount);
+	deltaMagnitudes.resize(vertexCount);
+
 	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
 		MVector delta{ vertexPositions[vertexIndex] - smoothedPositions[vertexIndex] };
-		deltas[vertexIndex].deltaMagnitude = delta.length();
+		deltaMagnitudes[vertexIndex] = delta.length();
 
 		unsigned int neighbourIterations{ neighbours[vertexIndex].length() - 1 };
-		deltas[vertexIndex].deltas.setLength(neighbourIterations);
+		deltas[vertexIndex].setLength(neighbourIterations);
 		for (unsigned int neighbourIndex{ 0 }; neighbourIndex < neighbourIterations; neighbourIndex++) {
 			MVector tangent = smoothedPositions[neighbours[vertexIndex][neighbourIndex]] - smoothedPositions[vertexIndex];
 			MVector neighbourVerctor = smoothedPositions[neighbours[vertexIndex][neighbourIndex + 1]] - smoothedPositions[vertexIndex];
@@ -279,7 +284,7 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 			buildTangentSpaceMatrix(tangentSpaceMatrix, tangent, normal, binormal);
 
 			// Calculate the displacement Vector
-			deltas[vertexIndex].deltas[neighbourIndex] = tangentSpaceMatrix.inverse() * delta;
+			deltas[vertexIndex][neighbourIndex] = tangentSpaceMatrix.inverse() * delta;
 		}
 	}
 
