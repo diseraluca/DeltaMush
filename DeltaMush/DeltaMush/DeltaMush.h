@@ -57,6 +57,7 @@ public:
 	static MTypeId typeId;
 
 	static MObject referenceMesh;
+	static MObject rebindMesh;
 	static MObject smoothingIterations;
 	static MObject smoothWeight;
 	static MObject deltaWeight;

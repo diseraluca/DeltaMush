@@ -23,6 +23,7 @@ MString DeltaMush::typeName{ "ldsDeltaMush" };
 MTypeId DeltaMush::typeId{ 0xd1230a };
 
 MObject DeltaMush::referenceMesh;
+MObject DeltaMush::rebindMesh;
 MObject DeltaMush::smoothingIterations;
 MObject DeltaMush::smoothWeight;
 MObject DeltaMush::deltaWeight;
@@ -42,6 +43,11 @@ MStatus DeltaMush::initialize()
 	referenceMesh = tAttr.create("referenceMesh", "ref", MFnData::kMesh, &status);
 	CHECK_MSTATUS_AND_RETURN_IT(status);
 	CHECK_MSTATUS(addAttribute(referenceMesh));
+
+	rebindMesh = nAttr.create("rebindMesh", "rbm", MFnNumericData::kBoolean, false, &status);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+	CHECK_MSTATUS(nAttr.setKeyable(true));
+	CHECK_MSTATUS(addAttribute(rebindMesh));
 
 	smoothingIterations = nAttr.create("smoothingIterations", "smi", MFnNumericData::kInt, 1, &status);
 	CHECK_MSTATUS_AND_RETURN_IT(status);
@@ -64,6 +70,7 @@ MStatus DeltaMush::initialize()
 	CHECK_MSTATUS(addAttribute(deltaWeight));
 
 	CHECK_MSTATUS(attributeAffects(referenceMesh, outputGeom));
+	CHECK_MSTATUS(attributeAffects(rebindMesh, outputGeom));
 	CHECK_MSTATUS(attributeAffects(smoothingIterations, outputGeom));
 	CHECK_MSTATUS(attributeAffects(smoothWeight, outputGeom));
 	CHECK_MSTATUS(attributeAffects(deltaWeight, outputGeom));
