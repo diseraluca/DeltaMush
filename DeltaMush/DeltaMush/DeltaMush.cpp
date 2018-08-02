@@ -234,7 +234,7 @@ MStatus DeltaMush::getNeighbours(MObject & mesh, unsigned int vertexCount)
 	return MStatus::kSuccess;
 }
 
-MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPointArray & out_smoothedPositions, unsigned int iterations, double weight) const
+MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPointArray & out_smoothedPositions, unsigned int iterations, double weight)
 {
 	unsigned int vertexCount{ verticesPositions.length() };
 	out_smoothedPositions.setLength(vertexCount);
@@ -255,15 +255,17 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 	return MStatus::kSuccess;
 }
 
-MVector DeltaMush::neighboursAveragePosition(const MPointArray & verticesPositions, unsigned int vertexIndex) const
+MVector DeltaMush::neighboursAveragePosition(const MPointArray & verticesPositions, unsigned int vertexIndex)
 {
 	unsigned int neighbourCount{ neighbours[vertexIndex].length() };
 
 	MVector averagePosition{};
 	const double*  vertexPtr{ &verticesPositions[0].x };
 	double* averagePtr{ &averagePosition.x };
-	for (unsigned int neighbourIndex{ 0 }; neighbourIndex < neighbourCount; neighbourIndex++) {
-		vertexPtr = &verticesPositions[0].x + (neighbours[vertexIndex][neighbourIndex] * 4);
+	const int* neighbourPtr{ &neighbours[vertexIndex][0] };
+
+	for (unsigned int neighbourIndex{ 0 }; neighbourIndex < neighbourCount; neighbourIndex++, neighbourPtr++) {
+		vertexPtr = &verticesPositions[0].x + (neighbourPtr[0] * 4);
 
 		averagePosition[0] += vertexPtr[0];
 		averagePosition[1] += vertexPtr[1];
