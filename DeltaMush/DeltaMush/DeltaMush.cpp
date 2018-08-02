@@ -260,8 +260,14 @@ MVector DeltaMush::neighboursAveragePosition(const MPointArray & verticesPositio
 	unsigned int neighbourCount{ neighbours[vertexIndex].length() };
 
 	MVector averagePosition{};
+	const double*  vertexPtr{ &verticesPositions[0].x };
+	double* averagePtr{ &averagePosition.x };
 	for (unsigned int neighbourIndex{ 0 }; neighbourIndex < neighbourCount; neighbourIndex++) {
-		averagePosition += verticesPositions[neighbours[vertexIndex][neighbourIndex]];
+		vertexPtr = &verticesPositions[0].x + (neighbours[vertexIndex][neighbourIndex] * 4);
+
+		averagePosition[0] += vertexPtr[0];
+		averagePosition[1] += vertexPtr[1];
+		averagePosition[2] += vertexPtr[2];
 	}
 
 	averagePosition /= neighbourCount;
