@@ -18,14 +18,25 @@
 #include <maya/MItMeshVertex.h>
 #include <maya/MFloatVectorArray.h>
 #include <maya/MMatrix.h>
+#include <maya/MEvaluationNode.h>
 
 MString DeltaMush::typeName{ "ldsDeltaMush" };
 MTypeId DeltaMush::typeId{ 0xd1230a };
 
 MObject DeltaMush::referenceMesh;
+MObject DeltaMush::rebindMesh;
 MObject DeltaMush::smoothingIterations;
 MObject DeltaMush::smoothWeight;
 MObject DeltaMush::deltaWeight;
+
+DeltaMush::DeltaMush()
+	:isInitialized{ false },
+	 neighbours{},
+	 deltas{},
+	 deltaMagnitudes{},
+	 perVertexWeights{}
+{
+}
 
 void * DeltaMush::creator()
 {
@@ -42,6 +53,11 @@ MStatus DeltaMush::initialize()
 	referenceMesh = tAttr.create("referenceMesh", "ref", MFnData::kMesh, &status);
 	CHECK_MSTATUS_AND_RETURN_IT(status);
 	CHECK_MSTATUS(addAttribute(referenceMesh));
+
+	rebindMesh = nAttr.create("rebindMesh", "rbm", MFnNumericData::kBoolean, false, &status);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+	CHECK_MSTATUS(nAttr.setKeyable(true));
+	CHECK_MSTATUS(addAttribute(rebindMesh));
 
 	smoothingIterations = nAttr.create("smoothingIterations", "smi", MFnNumericData::kInt, 1, &status);
 	CHECK_MSTATUS_AND_RETURN_IT(status);
@@ -64,6 +80,7 @@ MStatus DeltaMush::initialize()
 	CHECK_MSTATUS(addAttribute(deltaWeight));
 
 	CHECK_MSTATUS(attributeAffects(referenceMesh, outputGeom));
+	CHECK_MSTATUS(attributeAffects(rebindMesh, outputGeom));
 	CHECK_MSTATUS(attributeAffects(smoothingIterations, outputGeom));
 	CHECK_MSTATUS(attributeAffects(smoothWeight, outputGeom));
 	CHECK_MSTATUS(attributeAffects(deltaWeight, outputGeom));
@@ -73,90 +90,131 @@ MStatus DeltaMush::initialize()
 	return MStatus::kSuccess;
 }
 
-MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMatrix & matrix, unsigned int multiIndex)
+// Set the data initialization to be rerun if the smoothingIteration or referenceMesh values change.
+// Used when maya is in DG evaluation.
+MStatus DeltaMush::setDependentsDirty(const MPlug & plug, MPlugArray & plugArray)
+{
+	if (plug == smoothingIterations || plug == referenceMesh) {
+		isInitialized = false;
+	}
+
+	return MPxNode::setDependentsDirty(plug, plugArray);
+}
+
+// Set the data initialization to be rerun if the smoothingIteration or referenceMesh values change.
+// Used when maya is in paraller or serial evaluation.
+MStatus DeltaMush::preEvaluation(const MDGContext & context, const MEvaluationNode & evaluationNode)
 {
 	MStatus status{};
 
-	MPlug referenceMeshPlug{ thisMObject(), referenceMesh };
-	if (!referenceMeshPlug.isConnected()) {
-		MGlobal::displayWarning(this->name() + ": referenceMesh is not connected. Please connect a mesh");
-		return MStatus::kUnknownParameter;
+	if (!context.isNormal()) {
+		return MStatus::kFailure;
 	}
 
-	// Retrieves attributes values
-	float envelopeValue{ block.inputValue(envelope).asFloat() };
-	MObject referenceMeshValue{ block.inputValue(referenceMesh).asMesh() };
+	if ((evaluationNode.dirtyPlugExists(smoothingIterations, &status) && status) ||
+		(evaluationNode.dirtyPlugExists(referenceMesh, &status) && status)) 
+	{
+		isInitialized = false;
+	}
+
+	return MStatus::kSuccess;
+}
+
+MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMatrix & matrix, unsigned int multiIndex)
+{
+	bool rebindMeshValue{ block.inputValue(rebindMesh).asBool() };
 	int smoothingIterationsValue{ block.inputValue(smoothingIterations).asInt() };
 	double smoothWeightValue{ block.inputValue(smoothWeight).asDouble() };
-	double deltaWeightValue{ block.inputValue(deltaWeight).asDouble() };
 
-	int vertexCount{ iterator.count(&status) };
-	CHECK_MSTATUS_AND_RETURN_IT(status);
+	int vertexCount{ iterator.count() };
+	if (rebindMeshValue || !isInitialized) {
+		// If a referenceMesh is not provided we get out
+		MPlug referenceMeshPlug{ thisMObject(), referenceMesh };
+		if (!referenceMeshPlug.isConnected()) {
+			MGlobal::displayWarning(this->name() + ": referenceMesh is not connected. Please connect a mesh");
+			return MStatus::kUnknownParameter;
+		}
 
-	// Retrieves the positions for the reference mesh
-	MFnMesh referenceMeshFn{ referenceMeshValue };
-	MPointArray referenceMeshVertexPositions{};
-	referenceMeshVertexPositions.setLength(vertexCount);
-	CHECK_MSTATUS_AND_RETURN_IT(referenceMeshFn.getPoints(referenceMeshVertexPositions));
+		// Retrieves the positions for the reference mesh
+		MObject referenceMeshValue{ block.inputValue(referenceMesh).asMesh() };
+		MFnMesh referenceMeshFn{ referenceMeshValue };
 
-	// Build the neighbours array 
-	std::vector<MIntArray> referenceMeshNeighbours{};
-	getNeighbours(referenceMeshValue, referenceMeshNeighbours, vertexCount);
+		MPointArray referenceMeshVertexPositions{};
+		referenceMeshVertexPositions.setLength(vertexCount);
+		referenceMeshFn.getPoints(referenceMeshVertexPositions);
 
-	// Calculate the smoothed positions for the reference mesh
-	MPointArray referenceMeshSmoothedPositions{};
-	averageSmoothing(referenceMeshVertexPositions, referenceMeshSmoothedPositions, referenceMeshNeighbours, smoothingIterationsValue, smoothWeightValue);
+		// Build the neighbours array 
+		getNeighbours(referenceMeshValue, vertexCount);
 
-	// Calculate the deltas
-	std::vector<deltaCache> deltas{};
-	cacheDeltas(referenceMeshVertexPositions, referenceMeshSmoothedPositions, referenceMeshNeighbours, deltas, vertexCount);
+		// Calculate the smoothed positions for the reference mesh
+		MPointArray referenceMeshSmoothedPositions{};
+		averageSmoothing(referenceMeshVertexPositions, referenceMeshSmoothedPositions, smoothingIterationsValue, smoothWeightValue);
+
+		// Calculate the deltas
+		cacheDeltas(referenceMeshVertexPositions, referenceMeshSmoothedPositions, vertexCount);
+
+		isInitialized = true;
+	}
 
 	MPointArray meshVertexPositions{};
 	iterator.allPositions(meshVertexPositions);
 
 	// Caculate the smoothed positions for the deformed mesh
 	MPointArray meshSmoothedPositions{};
-	averageSmoothing(meshVertexPositions, meshSmoothedPositions, referenceMeshNeighbours, smoothingIterationsValue, smoothWeightValue);
+	averageSmoothing(meshVertexPositions, meshSmoothedPositions, smoothingIterationsValue, smoothWeightValue);
 
 	// Apply the deltas
 	MPointArray resultPositions{};
 	resultPositions.setLength(vertexCount);
 
-	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
-		MVector delta{};
+	// Store the current values of the per-vertex weights
+	getPerVertexWeights(block, multiIndex, vertexCount);
 
-		unsigned int neighbourIterations{ referenceMeshNeighbours[vertexIndex].length() - 1 };
+	// Declares the data needed for the loop
+	MVector delta{};
+	MVector tangent{};
+	MVector neighbourVector{};
+	MVector binormal{};
+	MVector normal{};
+	MMatrix tangentSpaceMatrix{};
+
+	float envelopeValue{ block.inputValue(envelope).asFloat() };
+	double deltaWeightValue{ block.inputValue(deltaWeight).asDouble() };
+
+	for (int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
+		delta = { 0, 0, 0 };
+
+		unsigned int neighbourIterations{ neighbours[vertexIndex].length() - 1 };
 		for (unsigned int neighbourIndex{ 0 }; neighbourIndex < neighbourIterations; neighbourIndex++) {
-			MVector tangent = meshSmoothedPositions[referenceMeshNeighbours[vertexIndex][neighbourIndex]] - meshSmoothedPositions[vertexIndex];
-			MVector neighbourVerctor = meshSmoothedPositions[referenceMeshNeighbours[vertexIndex][neighbourIndex + 1]] - meshSmoothedPositions[vertexIndex];
+			tangent = meshSmoothedPositions[neighbours[vertexIndex][neighbourIndex]] - meshSmoothedPositions[vertexIndex];
+			neighbourVector = meshSmoothedPositions[neighbours[vertexIndex][neighbourIndex + 1]] - meshSmoothedPositions[vertexIndex];
 
 			tangent.normalize();
-			neighbourVerctor.normalize();
+			neighbourVector.normalize();
 
-			MVector binormal{ tangent ^ neighbourVerctor };
-			MVector normal{ tangent ^ binormal };
+			// Ensures  axis orthogonality
+			binormal = tangent ^ neighbourVector;
+			normal = tangent ^ binormal;
 
 			// Build Tangent Space Matrix
-			MMatrix tangentSpaceMatrix{};
 			buildTangentSpaceMatrix(tangentSpaceMatrix, tangent, normal, binormal);
 
 			// Accumulate the displacement Vectors
-			delta += tangentSpaceMatrix * deltas[vertexIndex].deltas[neighbourIndex];
+			delta += tangentSpaceMatrix * deltas[vertexIndex][neighbourIndex];
 		}
 
 		// Averaging the delta
 		delta /= static_cast<double>(neighbourIterations);
 
 		// Scaling the delta
-		delta = delta.normal() * (deltas[vertexIndex].deltaMagnitude * deltaWeightValue);
+		delta = delta.normal() * (deltaMagnitudes[vertexIndex] * deltaWeightValue);
 
 		resultPositions[vertexIndex] = meshSmoothedPositions[vertexIndex] + delta;
 
 		// We calculate the new definitive delta and apply the remaining scaling factors to it
 		delta = resultPositions[vertexIndex] - meshVertexPositions[vertexIndex];
 
-		float vertexWeight{ weightValue(block, multiIndex, vertexIndex) };
-		resultPositions[vertexIndex] = meshVertexPositions[vertexIndex] + (delta * vertexWeight * envelopeValue);
+		resultPositions[vertexIndex] = meshVertexPositions[vertexIndex] + (delta * perVertexWeights[vertexIndex] * envelopeValue);
 	}
 
 	iterator.setAllPositions(resultPositions);
@@ -164,19 +222,19 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	return MStatus::kSuccess;
 }
 
-MStatus DeltaMush::getNeighbours(MObject & mesh, std::vector<MIntArray>& out_neighbours, unsigned int vertexCount) const
+MStatus DeltaMush::getNeighbours(MObject & mesh, unsigned int vertexCount)
 {
-	out_neighbours.resize(vertexCount);
+	neighbours.resize(vertexCount);
 
 	MItMeshVertex meshVtxIt{ mesh };
 	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++, meshVtxIt.next()) {
-		CHECK_MSTATUS_AND_RETURN_IT(meshVtxIt.getConnectedVertices(out_neighbours[vertexIndex]));
+		CHECK_MSTATUS_AND_RETURN_IT(meshVtxIt.getConnectedVertices(neighbours[vertexIndex]));
 	}
 
 	return MStatus::kSuccess;
 }
 
-MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPointArray & out_smoothedPositions, const std::vector<MIntArray>& neighbours, unsigned int iterations, double weight) const
+MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPointArray & out_smoothedPositions, unsigned int iterations, double weight) const
 {
 	unsigned int vertexCount{ verticesPositions.length() };
 	out_smoothedPositions.setLength(vertexCount);
@@ -185,7 +243,7 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 	MPointArray verticesPositionsCopy{ verticesPositions };
 	for (unsigned int iterationIndex{ 0 }; iterationIndex < iterations; iterationIndex++) {
 		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
-			MVector averagePosition{ neighboursAveragePosition(verticesPositionsCopy, neighbours, vertexIndex) };
+			MVector averagePosition{ neighboursAveragePosition(verticesPositionsCopy, vertexIndex) };
 			MVector smoothedPosition{ ((averagePosition - verticesPositionsCopy[vertexIndex]) * weight) + verticesPositionsCopy[vertexIndex] };
 
 			out_smoothedPositions[vertexIndex] = smoothedPosition;
@@ -197,7 +255,7 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 	return MStatus::kSuccess;
 }
 
-MVector DeltaMush::neighboursAveragePosition(const MPointArray & verticesPositions, const std::vector<MIntArray>& neighbours, unsigned int vertexIndex) const
+MVector DeltaMush::neighboursAveragePosition(const MPointArray & verticesPositions, unsigned int vertexIndex) const
 {
 	unsigned int neighbourCount{ neighbours[vertexIndex].length() };
 
@@ -211,15 +269,17 @@ MVector DeltaMush::neighboursAveragePosition(const MPointArray & verticesPositio
 	return averagePosition;
 }
 
-MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPointArray & smoothedPositions, const std::vector<MIntArray>& neighbours, std::vector<deltaCache> & out_deltas, unsigned int vertexCount) const
+MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPointArray & smoothedPositions, unsigned int vertexCount)
 {
-	out_deltas.resize(vertexCount);
+	deltas.resize(vertexCount);
+	deltaMagnitudes.resize(vertexCount);
+
 	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
 		MVector delta{ vertexPositions[vertexIndex] - smoothedPositions[vertexIndex] };
-		out_deltas[vertexIndex].deltaMagnitude = delta.length();
+		deltaMagnitudes[vertexIndex] = delta.length();
 
 		unsigned int neighbourIterations{ neighbours[vertexIndex].length() - 1 };
-		out_deltas[vertexIndex].deltas.setLength(neighbourIterations);
+		deltas[vertexIndex].setLength(neighbourIterations);
 		for (unsigned int neighbourIndex{ 0 }; neighbourIndex < neighbourIterations; neighbourIndex++) {
 			MVector tangent = smoothedPositions[neighbours[vertexIndex][neighbourIndex]] - smoothedPositions[vertexIndex];
 			MVector neighbourVerctor = smoothedPositions[neighbours[vertexIndex][neighbourIndex + 1]] - smoothedPositions[vertexIndex];
@@ -235,7 +295,7 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 			buildTangentSpaceMatrix(tangentSpaceMatrix, tangent, normal, binormal);
 
 			// Calculate the displacement Vector
-			out_deltas[vertexIndex].deltas[neighbourIndex] = tangentSpaceMatrix.inverse() * delta;
+			deltas[vertexIndex][neighbourIndex] = tangentSpaceMatrix.inverse() * delta;
 		}
 	}
 
@@ -264,6 +324,17 @@ MStatus DeltaMush::buildTangentSpaceMatrix(MMatrix & out_TangetSpaceMatrix, cons
 	out_TangetSpaceMatrix[3][1] = 0.0;
 	out_TangetSpaceMatrix[3][2] = 0.0;
 	out_TangetSpaceMatrix[3][3] = 1.0;
+
+	return MStatus::kSuccess;
+}
+
+MStatus DeltaMush::getPerVertexWeights(MDataBlock & block, unsigned int multiIndex, unsigned int vertexCount)
+{
+	perVertexWeights.resize(vertexCount);
+
+	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
+		perVertexWeights[vertexIndex] = weightValue(block, multiIndex, vertexIndex);
+	}
 
 	return MStatus::kSuccess;
 }
