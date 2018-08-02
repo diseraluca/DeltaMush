@@ -42,9 +42,6 @@ private:
 	// Perform an average neighbour smoothing on the vertices in vertices position and stores the smoothedPositions in out_smoothedPositions.
 	MStatus averageSmoothing(const MPointArray& verticesPositions, MPointArray& out_smoothedPositions, unsigned int iterations, double weight);
 
-	// Calculates and return an MVector representing the average positions of the neighbours vertices of the vertex with ID = vertexIndex 
-	MVector neighboursAveragePosition(const MPointArray& verticesPositions, unsigned int vertexIndex);
-
 	// Calculate the tangent space deltas between the smoothed positions and the original positions. Initializes this->deltas and stores
 	// the resulting deltas in it. Furthermore it initializes this->magnitude and store the respective magnitude in it.
 	MStatus cacheDeltas(const MPointArray& vertexPositions, const MPointArray& smoothedPositions, unsigned int vertexCount);
