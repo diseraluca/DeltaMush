@@ -14,7 +14,6 @@
 // This node will perform a Delta Mush smoothing that smooths a mesh while preventing the loss of volume and details.
 // Used to help and speed up the skinning of rigs while giving high level and fast deformations.
 // This implementation of the deformer requires a reference mesh that is an exact rest-pose copy of the deformed mesh.
-// This implementation of the deformer requires the meshes to have a correctly unwrapped UV set to function properly.
 
 #pragma once
 
@@ -37,7 +36,7 @@ public:
 	virtual MStatus deform(MDataBlock & block, MItGeometry & iterator, const MMatrix & matrix, unsigned int multiIndex) override;
 
 private:
-	// Get the neighbours vertices per-vertex of mesh. The neighbours indexes are stored into out_neighbours
+	// Get the neighbours vertices per-vertex of mesh. Stores them in the this->neighbours
 	MStatus getNeighbours(MObject& mesh, unsigned int vertexCount);
 
 	// Perform an average neighbour smoothing on the vertices in vertices position and stores the smoothedPositions in out_smoothedPositions.
@@ -46,9 +45,13 @@ private:
 	// Calculates and return an MVector representing the average positions of the neighbours vertices of the vertex with ID = vertexIndex 
 	MVector neighboursAveragePosition(const MPointArray& verticesPositions, unsigned int vertexIndex) const;
 
-	// Calculate the tangent space deltas between the smoothed positions and the original positions and stores them in out_deltas.
+	// Calculate the tangent space deltas between the smoothed positions and the original positions. Initializes this->deltas and stores
+	// the resulting deltas in it. Furthermore it initializes this->magnitude and store the respective magnitude in it.
 	MStatus cacheDeltas(const MPointArray& vertexPositions, const MPointArray& smoothedPositions, unsigned int vertexCount);
 	MStatus buildTangentSpaceMatrix(MMatrix& out_TangetSpaceMatrix, const MVector& tangent, const MVector& normal, const MVector& binormal) const;
+
+	// Retrieves the per-vertex weight of every vertex and stores them in this->perVertexWeight
+	MStatus getPerVertexWeights(MDataBlock& block, unsigned int multiIndex, unsigned int vertexCount);
 
 public:
 	static MString typeName;
@@ -63,8 +66,8 @@ public:
 private:
 	bool isInitialized;
 
-	std::vector<MIntArray> neighbours{};
+	std::vector<MIntArray> neighbours;
 	std::vector<MVectorArray> deltas;
 	std::vector<double> deltaMagnitudes;
-
+	std::vector<float> perVertexWeights;
 };
