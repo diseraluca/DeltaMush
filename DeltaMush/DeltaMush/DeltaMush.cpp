@@ -244,15 +244,24 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 
 	//Declaring the data needed by the loop
 	MVector averagePosition{};
+	unsigned int neighbourCount{};
+
 	double* averagePtr{ &averagePosition.x };
 	const double*  vertexPtr{};
 	const int* neighbourPtr{};
+	double averageFactor{};
 
-	MVector smoothedPosition{};
+	double* outSmoothedPositionsPtr;
+	double* verticesPositionsCopyPtr;
 
 	for (unsigned int iterationIndex{ 0 }; iterationIndex < iterations; iterationIndex++) {
-		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
-			unsigned int neighbourCount{ neighbours[vertexIndex].length() };
+
+		outSmoothedPositionsPtr = &out_smoothedPositions[0].x;
+		verticesPositionsCopyPtr = &verticesPositionsCopy[0].x;
+
+		// Inrementing the pointer by four makes us jumps four double ( x, y, z , w ) positioning us on the next MPoint members
+		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++, outSmoothedPositionsPtr += 4, verticesPositionsCopyPtr += 4) {
+			neighbourCount = neighbours[vertexIndex].length();
 
 			//resetting the vector
 			averagePtr[0] = 0.0;
@@ -268,11 +277,16 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 				averagePtr[2] += vertexPtr[2];
 			}
 
-			averagePosition /= neighbourCount;
+			// Divides the accumulated vector to average it
+			averageFactor = (1.0 / neighbourCount);
+			averagePtr[0] *= averageFactor;
+			averagePtr[1] *= averageFactor;
+			averagePtr[2] *= averageFactor;
 
-			smoothedPosition = ((averagePosition - verticesPositionsCopy[vertexIndex]) * weight) + verticesPositionsCopy[vertexIndex];
-
-			out_smoothedPositions[vertexIndex] = smoothedPosition;
+			outSmoothedPositionsPtr[0] = ((averagePtr[0] - verticesPositionsCopyPtr[0]) * weight) + verticesPositionsCopyPtr[0];
+			outSmoothedPositionsPtr[1] = ((averagePtr[1] - verticesPositionsCopyPtr[1]) * weight) + verticesPositionsCopyPtr[1];
+			outSmoothedPositionsPtr[2] = ((averagePtr[2] - verticesPositionsCopyPtr[2]) * weight) + verticesPositionsCopyPtr[2];
+			outSmoothedPositionsPtr[3] = 1.0;
 		}
 
 		verticesPositionsCopy.copy(out_smoothedPositions);
