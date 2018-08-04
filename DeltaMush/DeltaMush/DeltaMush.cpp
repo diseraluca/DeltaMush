@@ -170,6 +170,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	// Store the current values of the per-vertex weights
 	getPerVertexWeights(block, multiIndex, vertexCount);
 
+	auto start = std::chrono::high_resolution_clock::now();
 	// Declares the data needed for the loop
 	MVector delta{};
 	MVector tangent{};
@@ -178,16 +179,31 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	MVector normal{};
 	MMatrix tangentSpaceMatrix{};
 
+	double *deltaPtr{ &delta.x };
+	double* tangentPtr{ &tangent.x };
+	double* neighbourVectorPtr{ &neighbourVector.x };
+
+	double *smoothedPositionsPtr{ &meshSmoothedPositions[0].x };
+	double averageFactor{};
+
 	float envelopeValue{ block.inputValue(envelope).asFloat() };
 	double deltaWeightValue{ block.inputValue(deltaWeight).asDouble() };
 
 	for (int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
-		delta = { 0, 0, 0 };
+		// resetting the delta vector
+		deltaPtr[0] = 0.0;
+		deltaPtr[1] = 0.0;
+		deltaPtr[2] = 0.0;
 
 		unsigned int neighbourIterations{ neighbours[vertexIndex].length() - 1 };
 		for (unsigned int neighbourIndex{ 0 }; neighbourIndex < neighbourIterations; neighbourIndex++) {
-			tangent = meshSmoothedPositions[neighbours[vertexIndex][neighbourIndex]] - meshSmoothedPositions[vertexIndex];
-			neighbourVector = meshSmoothedPositions[neighbours[vertexIndex][neighbourIndex + 1]] - meshSmoothedPositions[vertexIndex];
+			tangentPtr[0] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex] * 4] - smoothedPositionsPtr[vertexIndex * 4];
+			tangentPtr[1] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex] * 4 + 1] - smoothedPositionsPtr[vertexIndex * 4 + 1];
+			tangentPtr[2] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex] * 4 + 2] - smoothedPositionsPtr[vertexIndex * 4 + 2];
+
+			neighbourVectorPtr[0] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex + 1] * 4] - smoothedPositionsPtr[vertexIndex * 4];
+			neighbourVectorPtr[1] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex + 1] * 4 + 1] - smoothedPositionsPtr[vertexIndex * 4 + 1];
+			neighbourVectorPtr[2] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex + 1] * 4 + 2] - smoothedPositionsPtr[vertexIndex * 4 + 2];
 
 			tangent.normalize();
 			neighbourVector.normalize();
@@ -197,17 +213,45 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 			normal = tangent ^ binormal;
 
 			// Build Tangent Space Matrix
-			buildTangentSpaceMatrix(tangentSpaceMatrix, tangent, normal, binormal);
+			tangentSpaceMatrix[0][0] = tangentPtr[0];
+			tangentSpaceMatrix[0][1] = tangentPtr[1];
+			tangentSpaceMatrix[0][2] = tangentPtr[2];
+			tangentSpaceMatrix[0][3] = 0.0;
+
+			tangentSpaceMatrix[1][0] = normal.x;
+			tangentSpaceMatrix[1][1] = normal.y;
+			tangentSpaceMatrix[1][2] = normal.z;
+			tangentSpaceMatrix[1][3] = 0.0;
+
+			tangentSpaceMatrix[2][0] = binormal.x;
+			tangentSpaceMatrix[2][1] = binormal.y;
+			tangentSpaceMatrix[2][2] = binormal.z;
+			tangentSpaceMatrix[2][3] = 0.0;
+
+			tangentSpaceMatrix[3][0] = 0.0;
+			tangentSpaceMatrix[3][1] = 0.0;
+			tangentSpaceMatrix[3][2] = 0.0;
+			tangentSpaceMatrix[3][3] = 1.0;
 
 			// Accumulate the displacement Vectors
-			delta += tangentSpaceMatrix * deltas[vertexIndex][neighbourIndex];
+			MVector tangentSpaceDelta{ tangentSpaceMatrix * deltas[vertexIndex][neighbourIndex] };
+			deltaPtr[0] += tangentSpaceDelta.x;
+			deltaPtr[1] += tangentSpaceDelta.y;
+			deltaPtr[2] += tangentSpaceDelta.z;
 		}
 
 		// Averaging the delta
-		delta /= static_cast<double>(neighbourIterations);
+		averageFactor = (1.0 / neighbourIterations);
+		deltaPtr[0] *= neighbourIterations;
+		deltaPtr[1] *= neighbourIterations;
+		deltaPtr[2] *= neighbourIterations;
 
 		// Scaling the delta
-		delta = delta.normal() * (deltaMagnitudes[vertexIndex] * deltaWeightValue);
+		delta.normalize();
+		deltaPtr[0] *= (deltaMagnitudes[vertexIndex] * deltaWeightValue);
+		deltaPtr[1] *= (deltaMagnitudes[vertexIndex] * deltaWeightValue);
+		deltaPtr[2] *= (deltaMagnitudes[vertexIndex] * deltaWeightValue);
+
 
 		resultPositions[vertexIndex] = meshSmoothedPositions[vertexIndex] + delta;
 
@@ -217,6 +261,14 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		resultPositions[vertexIndex] = meshVertexPositions[vertexIndex] + (delta * perVertexWeights[vertexIndex] * envelopeValue);
 	}
 
+	auto end = std::chrono::high_resolution_clock::now();
+	time += (end - start);
+	++counter;
+	if (counter >= 100) {
+		std::cout << this->name() << ":" << std::chrono::duration_cast<std::chrono::microseconds>(time).count() << std::endl;
+		time = time.zero();
+		counter = 0;
+	}
 	iterator.setAllPositions(resultPositions);
 
 	return MStatus::kSuccess;
