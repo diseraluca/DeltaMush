@@ -24,7 +24,7 @@
 #include <maya/MFnMesh.h>
 
 #include <vector>
-#include <chrono>
+
 class DeltaMush : public MPxDeformerNode {
 public:
 	DeltaMush();
@@ -67,7 +67,4 @@ private:
 	std::vector<MVectorArray> deltas;
 	std::vector<double> deltaMagnitudes;
 	std::vector<float> perVertexWeights;
-
-	int counter;
-	std::chrono::duration<double> time;
 };
