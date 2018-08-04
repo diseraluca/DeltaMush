@@ -102,7 +102,7 @@ MStatus DeltaMush::setDependentsDirty(const MPlug & plug, MPlugArray & plugArray
 }
 
 // Set the data initialization to be rerun if the smoothingIteration or referenceMesh values change.
-// Used when maya is in paraller or serial evaluation.
+// Used when maya is in parallel or serial evaluation.
 MStatus DeltaMush::preEvaluation(const MDGContext & context, const MEvaluationNode & evaluationNode)
 {
 	MStatus status{};
@@ -150,7 +150,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		MPointArray referenceMeshSmoothedPositions{};
 		averageSmoothing(referenceMeshVertexPositions, referenceMeshSmoothedPositions, smoothingIterationsValue, smoothWeightValue);
 
-		// Calculate the deltas
+		// Calculate and cache the deltas
 		cacheDeltas(referenceMeshVertexPositions, referenceMeshSmoothedPositions, vertexCount);
 
 		isInitialized = true;
@@ -186,7 +186,9 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	double* vertexPositionsPtr{ &meshVertexPositions[0].x };
 	double *smoothedPositionsPtr{ &meshSmoothedPositions[0].x };
 	double *resultPositionsPtr{ &resultPositions[0].x };
+	
 	double averageFactor{};
+	unsigned int neighbourIterations{};
 
 	float envelopeValue{ block.inputValue(envelope).asFloat() };
 	double deltaWeightValue{ block.inputValue(deltaWeight).asDouble() };
@@ -197,10 +199,10 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		deltaPtr[1] = 0.0;
 		deltaPtr[2] = 0.0;
 
-		unsigned int neighbourIterations{ neighbours[vertexIndex].length() - 1 };
+		neighbourIterations = neighbours[vertexIndex].length() - 1;
 		for (unsigned int neighbourIndex{ 0 }; neighbourIndex < neighbourIterations; neighbourIndex++) {
 
-			// Calculate the vectors between the current vertex and two of his neighbours
+			// Calculate the vectors between the current vertex and two of its neighbours
 			tangentPtr[0] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex] * 4] - smoothedPositionsPtr[vertexIndex * 4];
 			tangentPtr[1] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex] * 4 + 1] - smoothedPositionsPtr[vertexIndex * 4 + 1];
 			tangentPtr[2] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex] * 4 + 2] - smoothedPositionsPtr[vertexIndex * 4 + 2];
@@ -250,7 +252,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		resultPositionsPtr[2] = smoothedPositionsPtr[vertexIndex * 4 + 2] + deltaPtr[2];
 		resultPositionsPtr[3] = 1.0;
 
-		// We calculate the new definitive delta and apply the remaining scaling factors to it
+		// We calculate the new definitive delta
 		deltaPtr[0] = resultPositionsPtr[0] - vertexPositionsPtr[0];
 		deltaPtr[1] = resultPositionsPtr[1] - vertexPositionsPtr[1];
 		deltaPtr[2] = resultPositionsPtr[2] - vertexPositionsPtr[2];
@@ -272,7 +274,7 @@ MStatus DeltaMush::getNeighbours(MObject & mesh, unsigned int vertexCount)
 
 	MItMeshVertex meshVtxIt{ mesh };
 	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++, meshVtxIt.next()) {
-		CHECK_MSTATUS_AND_RETURN_IT(meshVtxIt.getConnectedVertices(neighbours[vertexIndex]));
+		meshVtxIt.getConnectedVertices(neighbours[vertexIndex]);
 	}
 
 	return MStatus::kSuccess;
@@ -294,6 +296,8 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 	const double*  vertexPtr{};
 	const int* neighbourPtr{};
 	double averageFactor{};
+
+	int currentVertex{};
 
 	double* outSmoothedPositionsPtr{ &out_smoothedPositions[0].x };
 	double* verticesPositionsCopyPtr{ &verticesPositionsCopy[0].x };
@@ -324,7 +328,8 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 			averagePtr[1] *= averageFactor;
 			averagePtr[2] *= averageFactor;
 
-			int currentVertex = vertexIndex * 4;
+			// Store the final weighted position
+			currentVertex = vertexIndex * 4;
 			outSmoothedPositionsPtr[currentVertex] = ((averagePtr[0] - verticesPositionsCopyPtr[currentVertex]) * weight) + verticesPositionsCopyPtr[currentVertex];
 			outSmoothedPositionsPtr[currentVertex + 1] = ((averagePtr[1] - verticesPositionsCopyPtr[currentVertex + 1]) * weight) + verticesPositionsCopyPtr[currentVertex + 1];
 			outSmoothedPositionsPtr[currentVertex + 2] = ((averagePtr[2] - verticesPositionsCopyPtr[currentVertex + 2]) * weight) + verticesPositionsCopyPtr[currentVertex + 2];
@@ -347,25 +352,53 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 	deltas.resize(vertexCount);
 	deltaMagnitudes.resize(vertexCount);
 
-	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
-		MVector delta{ vertexPositions[vertexIndex] - smoothedPositions[vertexIndex] };
+	// Declare the data needed by the loop
+	MVector delta{};
+	double *deltaPtr{ &delta.x };
+
+	const double *vertexPositionsPtr{ &vertexPositions[0].x };
+	const double *smoothedPositionsPtr{ &smoothedPositions[0].x };
+
+	unsigned int neighbourIterations{};
+
+	MMatrix tangentSpaceMatrix{};
+	double* tangentPtr{ &tangentSpaceMatrix.matrix[0][0] };
+	double* normalPtr{ &tangentSpaceMatrix.matrix[1][0] };
+	double* binormalPtr{ &tangentSpaceMatrix.matrix[2][0] };
+
+	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++, vertexPositionsPtr += 4) {
+		delta[0] = vertexPositionsPtr[0] - smoothedPositionsPtr[vertexIndex * 4];
+		delta[1] = vertexPositionsPtr[1] - smoothedPositionsPtr[vertexIndex * 4 + 1];
+		delta[2] = vertexPositionsPtr[2] - smoothedPositionsPtr[vertexIndex * 4 + 2];
+
 		deltaMagnitudes[vertexIndex] = delta.length();
 
-		unsigned int neighbourIterations{ neighbours[vertexIndex].length() - 1 };
+		neighbourIterations = neighbours[vertexIndex].length() - 1;
 		deltas[vertexIndex].setLength(neighbourIterations);
 		for (unsigned int neighbourIndex{ 0 }; neighbourIndex < neighbourIterations; neighbourIndex++) {
-			MVector tangent = smoothedPositions[neighbours[vertexIndex][neighbourIndex]] - smoothedPositions[vertexIndex];
-			MVector neighbourVerctor = smoothedPositions[neighbours[vertexIndex][neighbourIndex + 1]] - smoothedPositions[vertexIndex];
+			// Calculate the vectors between the current vertex and two of its neighbours
+			tangentPtr[0] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex] * 4] - smoothedPositionsPtr[vertexIndex * 4];
+			tangentPtr[1] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex] * 4 + 1] - smoothedPositionsPtr[vertexIndex * 4 + 1];
+			tangentPtr[2] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex] * 4 + 2] - smoothedPositionsPtr[vertexIndex * 4 + 2];
 
-			tangent.normalize();
-			neighbourVerctor.normalize();
+			normalPtr[0] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex + 1] * 4] - smoothedPositionsPtr[vertexIndex * 4];
+			normalPtr[1] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex + 1] * 4 + 1] - smoothedPositionsPtr[vertexIndex * 4 + 1];
+			normalPtr[2] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex + 1] * 4 + 2] - smoothedPositionsPtr[vertexIndex * 4 + 2];
 
-			MVector binormal{ tangent ^ neighbourVerctor };
-			MVector normal{ tangent ^ binormal };
+			// TODO : remove the unsafe casting and provide a custom normalization
+			((MVector*)(tangentPtr))->normalize();
+			((MVector*)(normalPtr))->normalize();
 
-			// Build Tangent Space Matrix
-			MMatrix tangentSpaceMatrix{};
-			buildTangentSpaceMatrix(tangentSpaceMatrix, tangent, normal, binormal);
+			// Ensures  axis orthogonality through cross product.
+			// Cross product is calculated in the following code as:
+			// crossVector = [(y1 * z2 - z1 * y2), (z1 * x2 - x1 * z2), (x1 * y2 - y1 * x2)]
+			binormalPtr[0] = tangentPtr[1] * normalPtr[2] - tangentPtr[2] * normalPtr[1];
+			binormalPtr[1] = tangentPtr[2] * normalPtr[0] - tangentPtr[0] * normalPtr[2];
+			binormalPtr[2] = tangentPtr[0] * normalPtr[1] - tangentPtr[1] * normalPtr[0];
+
+			normalPtr[0] = tangentPtr[1] * binormalPtr[2] - tangentPtr[2] * binormalPtr[1];
+			normalPtr[1] = tangentPtr[2] * binormalPtr[0] - tangentPtr[0] * binormalPtr[2];
+			normalPtr[2] = tangentPtr[0] * binormalPtr[1] - tangentPtr[1] * binormalPtr[0];
 
 			// Calculate the displacement Vector
 			deltas[vertexIndex][neighbourIndex] = tangentSpaceMatrix.inverse() * delta;
@@ -375,34 +408,10 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 	return MStatus::kSuccess;
 }
 
-MStatus DeltaMush::buildTangentSpaceMatrix(MMatrix & out_TangetSpaceMatrix, const MVector & tangent, const MVector & normal, const MVector & binormal) const
-{
-	// M = [tangent, normal, bitangent, translation(smoothedPosition]]
-	out_TangetSpaceMatrix[0][0] = tangent.x;
-	out_TangetSpaceMatrix[0][1] = tangent.y;
-	out_TangetSpaceMatrix[0][2] = tangent.z;
-	out_TangetSpaceMatrix[0][3] = 0.0;
-
-	out_TangetSpaceMatrix[1][0] = normal.x;
-	out_TangetSpaceMatrix[1][1] = normal.y;
-	out_TangetSpaceMatrix[1][2] = normal.z;
-	out_TangetSpaceMatrix[1][3] = 0.0;
-
-	out_TangetSpaceMatrix[2][0] = binormal.x;
-	out_TangetSpaceMatrix[2][1] = binormal.y;
-	out_TangetSpaceMatrix[2][2] = binormal.z;
-	out_TangetSpaceMatrix[2][3] = 0.0;
-
-	out_TangetSpaceMatrix[3][0] = 0.0;
-	out_TangetSpaceMatrix[3][1] = 0.0;
-	out_TangetSpaceMatrix[3][2] = 0.0;
-	out_TangetSpaceMatrix[3][3] = 1.0;
-
-	return MStatus::kSuccess;
-}
 
 MStatus DeltaMush::getPerVertexWeights(MDataBlock & block, unsigned int multiIndex, unsigned int vertexCount)
 {
+	// TODO : Get the values manually by handle
 	perVertexWeights.resize(vertexCount);
 
 	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {

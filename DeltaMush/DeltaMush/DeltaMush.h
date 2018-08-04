@@ -45,7 +45,6 @@ private:
 	// Calculate the tangent space deltas between the smoothed positions and the original positions. Initializes this->deltas and stores
 	// the resulting deltas in it. Furthermore it initializes this->magnitude and store the respective magnitude in it.
 	MStatus cacheDeltas(const MPointArray& vertexPositions, const MPointArray& smoothedPositions, unsigned int vertexCount);
-	MStatus buildTangentSpaceMatrix(MMatrix& out_TangetSpaceMatrix, const MVector& tangent, const MVector& normal, const MVector& binormal) const;
 
 	// Retrieves the per-vertex weight of every vertex and stores them in this->perVertexWeight
 	MStatus getPerVertexWeights(MDataBlock& block, unsigned int multiIndex, unsigned int vertexCount);
