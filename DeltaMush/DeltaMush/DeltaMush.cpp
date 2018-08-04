@@ -251,16 +251,13 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 	const int* neighbourPtr{};
 	double averageFactor{};
 
-	double* outSmoothedPositionsPtr;
-	double* verticesPositionsCopyPtr;
+	double* outSmoothedPositionsPtr{ &out_smoothedPositions[0].x };
+	double* verticesPositionsCopyPtr{ &verticesPositionsCopy[0].x };
 
 	for (unsigned int iterationIndex{ 0 }; iterationIndex < iterations; iterationIndex++) {
 
-		outSmoothedPositionsPtr = &out_smoothedPositions[0].x;
-		verticesPositionsCopyPtr = &verticesPositionsCopy[0].x;
-
 		// Inrementing the pointer by four makes us jumps four double ( x, y, z , w ) positioning us on the next MPoint members
-		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++, outSmoothedPositionsPtr += 4, verticesPositionsCopyPtr += 4) {
+		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex++) {
 			neighbourCount = neighbours[vertexIndex].length();
 
 			//resetting the vector
@@ -270,7 +267,7 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 
 			neighbourPtr = &neighbours[vertexIndex][0];
 			for (unsigned int neighbourIndex{ 0 }; neighbourIndex < neighbourCount; neighbourIndex++, neighbourPtr++) {
-				vertexPtr = &verticesPositionsCopy[0].x + (neighbourPtr[0] * 4);
+				vertexPtr = verticesPositionsCopyPtr + (neighbourPtr[0] * 4);
 
 				averagePtr[0] += vertexPtr[0];
 				averagePtr[1] += vertexPtr[1];
@@ -283,13 +280,19 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 			averagePtr[1] *= averageFactor;
 			averagePtr[2] *= averageFactor;
 
-			outSmoothedPositionsPtr[0] = ((averagePtr[0] - verticesPositionsCopyPtr[0]) * weight) + verticesPositionsCopyPtr[0];
-			outSmoothedPositionsPtr[1] = ((averagePtr[1] - verticesPositionsCopyPtr[1]) * weight) + verticesPositionsCopyPtr[1];
-			outSmoothedPositionsPtr[2] = ((averagePtr[2] - verticesPositionsCopyPtr[2]) * weight) + verticesPositionsCopyPtr[2];
-			outSmoothedPositionsPtr[3] = 1.0;
+			int currentVertex = vertexIndex * 4;
+			outSmoothedPositionsPtr[currentVertex] = ((averagePtr[0] - verticesPositionsCopyPtr[currentVertex]) * weight) + verticesPositionsCopyPtr[currentVertex];
+			outSmoothedPositionsPtr[currentVertex + 1] = ((averagePtr[1] - verticesPositionsCopyPtr[currentVertex + 1]) * weight) + verticesPositionsCopyPtr[currentVertex + 1];
+			outSmoothedPositionsPtr[currentVertex + 2] = ((averagePtr[2] - verticesPositionsCopyPtr[currentVertex + 2]) * weight) + verticesPositionsCopyPtr[currentVertex + 2];
+			outSmoothedPositionsPtr[currentVertex + 3] = 1.0;
 		}
 
-		verticesPositionsCopy.copy(out_smoothedPositions);
+		std::swap(outSmoothedPositionsPtr, verticesPositionsCopyPtr);
+	}
+
+	// If the number of iterations is even we have to copy the updated data in out__smoothed positions 
+	if ((iterations % 2) == 0) {
+		out_smoothedPositions.copy(verticesPositionsCopy);
 	}
 
 	return MStatus::kSuccess;
