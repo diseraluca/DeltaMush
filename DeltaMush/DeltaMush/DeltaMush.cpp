@@ -187,7 +187,8 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	double *smoothedPositionsPtr{ &meshSmoothedPositions[0].x };
 	double *resultPositionsPtr{ &resultPositions[0].x };
 	
-	double averageFactor{};
+	double length{};
+	double factor{};
 	unsigned int neighbourIterations{};
 
 	float envelopeValue{ block.inputValue(envelope).asFloat() };
@@ -211,9 +212,23 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 			normalPtr[1] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex + 1] * 4 + 1] - smoothedPositionsPtr[vertexIndex * 4 + 1];
 			normalPtr[2] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex + 1] * 4 + 2] - smoothedPositionsPtr[vertexIndex * 4 + 2];
 
-			// TODO : remove the unsafe casting and provide a custom normalization
-			((MVector*)(tangentPtr))->normalize();
-			((MVector*)(normalPtr))->normalize();
+			// Normalizes the two vectors.
+			// Vector normalization is calculated as follows:
+			// lenght of the vector -> sqrt(x*x + y*y + z*z)
+		    // [x, y, z] / length
+			length = std::sqrt(tangentPtr[0] * tangentPtr[0] + tangentPtr[1] * tangentPtr[1] + tangentPtr[2] * tangentPtr[2]);
+
+			factor = 1.0 / length;
+			tangentPtr[0] *= factor;
+			tangentPtr[1] *= factor;
+			tangentPtr[2] *= factor;
+
+			length = std::sqrt(normalPtr[0] * normalPtr[0] + normalPtr[1] * normalPtr[1] + normalPtr[2] * normalPtr[2]);
+
+			factor = 1.0 / length;
+			normalPtr[0] *= factor;
+			normalPtr[1] *= factor;
+			normalPtr[2] *= factor;
 
 			// Ensures  axis orthogonality through cross product.
 			// Cross product is calculated in the following code as:
@@ -235,7 +250,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		}
 
 		// Averaging the delta
-		averageFactor = (1.0 / neighbourIterations);
+		factor = (1.0 / neighbourIterations);
 		deltaPtr[0] *= neighbourIterations;
 		deltaPtr[1] *= neighbourIterations;
 		deltaPtr[2] *= neighbourIterations;
@@ -366,6 +381,9 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 	double* normalPtr{ &tangentSpaceMatrix.matrix[1][0] };
 	double* binormalPtr{ &tangentSpaceMatrix.matrix[2][0] };
 
+	double length{};
+	double factor{};
+
 	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; ++vertexIndex, vertexPositionsPtr += 4) {
 		delta[0] = vertexPositionsPtr[0] - smoothedPositionsPtr[vertexIndex * 4];
 		delta[1] = vertexPositionsPtr[1] - smoothedPositionsPtr[vertexIndex * 4 + 1];
@@ -385,9 +403,19 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 			normalPtr[1] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex + 1] * 4 + 1] - smoothedPositionsPtr[vertexIndex * 4 + 1];
 			normalPtr[2] = smoothedPositionsPtr[neighbours[vertexIndex][neighbourIndex + 1] * 4 + 2] - smoothedPositionsPtr[vertexIndex * 4 + 2];
 
-			// TODO : remove the unsafe casting and provide a custom normalization
-			((MVector*)(tangentPtr))->normalize();
-			((MVector*)(normalPtr))->normalize();
+			length = std::sqrt(tangentPtr[0] * tangentPtr[0] + tangentPtr[1] * tangentPtr[1] + tangentPtr[2] * tangentPtr[2]);
+
+			factor = 1.0 / length;
+			tangentPtr[0] *= factor;
+			tangentPtr[1] *= factor;
+			tangentPtr[2] *= factor;
+
+			length = std::sqrt(normalPtr[0] * normalPtr[0] + normalPtr[1] * normalPtr[1] + normalPtr[2] * normalPtr[2]);
+
+			factor = 1.0 / length;
+			normalPtr[0] *= factor;
+			normalPtr[1] *= factor;
+			normalPtr[2] *= factor;
 
 			// Ensures  axis orthogonality through cross product.
 			// Cross product is calculated in the following code as:
