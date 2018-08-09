@@ -32,8 +32,9 @@ MObject DeltaMush::smoothWeight;
 MObject DeltaMush::deltaWeight;
 
 
-const unsigned int DeltaMush::MAX_NEIGHBOURS;
-const unsigned int DeltaMush::DELTA_COUNT;
+const unsigned int DeltaMush::MAX_NEIGHBOURS{ 4 };
+const unsigned int DeltaMush::DELTA_COUNT{ MAX_NEIGHBOURS - 1 };
+const double DeltaMush::AVERAGE_FACTOR{ 1.0 / MAX_NEIGHBOURS };
 
 DeltaMush::DeltaMush()
 	:isInitialized{ false },
@@ -362,29 +363,21 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 	std::copy(verticesZ, verticesZ + vertexCount, verticesCopyZ);
 
 	//Declaring the data needed by the loop
-	MVector averagePosition{};
 	__m256d averageX;
 	__m256d averageY;
 	__m256d averageZ;
 
 	__m256d weighVector{ _mm256_set1_pd(weight) };
-	double* averagePtr{ &averagePosition.x };
-	const double*  vertexPtr{};
-	const int* neighbourPtr{ &neighbours[0]};
-	double averageFactor{};
-
-	int currentVertex{};
-
-	double* outSmoothedPositionsPtr{ &out_smoothedPositions[0].x };
-	double* verticesPositionsCopyPtr{ &verticesPositionsCopy[0].x };
+	int* neighbourPtr{};
 
 	for (unsigned int iterationIndex{ 0 }; iterationIndex < iterations; ++iterationIndex) {
-		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex += 4) {
+		neighbourPtr = &neighbours[0];
+
+		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex += 4, neighbourPtr += 12) {
 			averageX = _mm256_setzero_pd();
 			averageY = _mm256_setzero_pd();
 			averageZ = _mm256_setzero_pd();
 
-			neighbourPtr = &neighbours[vertexIndex * 4];
 			for (unsigned int neighbourIndex{ 0 }; neighbourIndex < MAX_NEIGHBOURS; ++neighbourIndex, ++neighbourPtr) {
 				__m256d neighboursX = _mm256_setr_pd(verticesCopyX[neighbourPtr[0]], verticesCopyX[neighbourPtr[0 + 4]], verticesCopyX[neighbourPtr[0 + 8]], verticesCopyX[neighbourPtr[0 + 12]]);
 				__m256d neighboursY = _mm256_setr_pd(verticesCopyY[neighbourPtr[0]], verticesCopyY[neighbourPtr[0 + 4]], verticesCopyY[neighbourPtr[0 + 8]], verticesCopyY[neighbourPtr[0 + 12]]);
@@ -396,8 +389,7 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 			}
 
 			// Divides the accumulated vector to average it
-			averageFactor = (1.0 / MAX_NEIGHBOURS);
-			__m256d averageFactorVec = _mm256_set1_pd(averageFactor);
+			__m256d averageFactorVec = _mm256_set1_pd(AVERAGE_FACTOR);
 
 			averageX = _mm256_mul_pd(averageX, averageFactorVec);
 			averageY = _mm256_mul_pd(averageY, averageFactorVec);

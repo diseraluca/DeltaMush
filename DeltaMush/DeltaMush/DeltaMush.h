@@ -63,8 +63,9 @@ public:
 	static MObject deltaWeight;
 
 public:
-	static const unsigned int MAX_NEIGHBOURS = 4;
-	static const unsigned int DELTA_COUNT = MAX_NEIGHBOURS - 1;
+	static const unsigned int MAX_NEIGHBOURS;;
+	static const unsigned int DELTA_COUNT;
+	static const double AVERAGE_FACTOR;
 
 private:
 	bool isInitialized;
