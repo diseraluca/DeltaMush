@@ -59,10 +59,14 @@ public:
 	static MObject smoothWeight;
 	static MObject deltaWeight;
 
+public:
+	static const unsigned int MAX_NEIGHBOURS = 4;
+	static const unsigned int DELTA_COUNT = MAX_NEIGHBOURS - 1;
+
 private:
 	bool isInitialized;
 
-	std::vector<MIntArray> neighbours;
+	std::vector<int> neighbours;
 	std::vector<MVectorArray> deltas;
 	std::vector<double> deltaMagnitudes;
 	std::vector<float> perVertexWeights;
