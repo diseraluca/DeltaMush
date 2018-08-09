@@ -309,7 +309,7 @@ void DeltaMush::composePointArray(double * x, double * y, double * z, MPointArra
 
 MStatus DeltaMush::getNeighbours(MObject & mesh, unsigned int vertexCount)
 {
-	neighbours.resize(vertexCount * MAX_NEIGHBOURS);
+	neighbours.resize((vertexCount + (vertexCount % MAX_NEIGHBOURS)) * MAX_NEIGHBOURS);
 
 	MItMeshVertex meshVtxIt{ mesh };
 	MIntArray temporaryNeighbours{};
@@ -337,29 +337,31 @@ MStatus DeltaMush::getNeighbours(MObject & mesh, unsigned int vertexCount)
 		}
 	}
 
+	// Padding the array to be divisible by four
+	std::memset(&neighbours[(vertexCount * MAX_NEIGHBOURS) + MAX_NEIGHBOURS], 0U, (sizeof(double) * ((vertexCount % MAX_NEIGHBOURS) * MAX_NEIGHBOURS)));
+
 	return MStatus::kSuccess;
 }
 
 MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPointArray & out_smoothedPositions, unsigned int iterations, double weight)
 {
-	// TODO : RESOLVE ERROR FOR NON /40 VERTEX COUNT
 	unsigned int vertexCount{ verticesPositions.length() };
 	out_smoothedPositions.setLength(vertexCount);
 
-	double* verticesX = new double[vertexCount];
-	double* verticesY = new double[vertexCount];
-	double* verticesZ = new double[vertexCount];
+	double* verticesX = new double[vertexCount + (vertexCount % MAX_NEIGHBOURS)];
+	double* verticesY = new double[vertexCount + (vertexCount % MAX_NEIGHBOURS)];
+	double* verticesZ = new double[vertexCount + (vertexCount % MAX_NEIGHBOURS)];
 	decomposePointArray(verticesPositions, verticesX, verticesY, verticesZ, vertexCount);
 
 	// A copy is necessary to avoid losing the original data trough the computations while working iteratively on the smoothed positions
 	MPointArray verticesPositionsCopy{ verticesPositions };
-	double* verticesCopyX = new double[vertexCount];
+	double* verticesCopyX = new double[vertexCount + (vertexCount % MAX_NEIGHBOURS)];
 	std::copy(verticesX, verticesX + vertexCount, verticesCopyX);
 
-	double* verticesCopyY = new double[vertexCount];
+	double* verticesCopyY = new double[vertexCount + (vertexCount % MAX_NEIGHBOURS)];
 	std::copy(verticesY, verticesY + vertexCount, verticesCopyY);
 
-	double* verticesCopyZ = new double[vertexCount];
+	double* verticesCopyZ = new double[vertexCount + (vertexCount % MAX_NEIGHBOURS)];
 	std::copy(verticesZ, verticesZ + vertexCount, verticesCopyZ);
 
 	//Declaring the data needed by the loop
