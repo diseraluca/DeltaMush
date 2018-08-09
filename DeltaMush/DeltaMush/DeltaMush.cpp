@@ -8,7 +8,7 @@
 //
 //
 // File : DeltaMush.cpp
-
+#define _SCL_SECURE_NO_WARNINGS
 #include "DeltaMush.h"
 
 #include <maya/MFnTypedAttribute.h>
@@ -19,6 +19,8 @@
 #include <maya/MFloatVectorArray.h>
 #include <maya/MMatrix.h>
 #include <maya/MEvaluationNode.h>
+
+#include <immintrin.h>
 
 MString DeltaMush::typeName{ "ldsDeltaMush" };
 MTypeId DeltaMush::typeId{ 0xd1230a };
@@ -285,6 +287,25 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	return MStatus::kSuccess;
 }
 
+void DeltaMush::decomposePointArray(const MPointArray & points, double * out_x, double * out_y, double * out_z, unsigned int vertexCount)
+{
+	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; ++vertexIndex, ++out_x, ++out_y, ++out_z) {
+		out_x[0] = points[vertexIndex].x;
+		out_y[0] = points[vertexIndex].y;
+		out_z[0] = points[vertexIndex].z;
+	}
+}
+
+void DeltaMush::composePointArray(double * x, double * y, double * z, MPointArray & out_points, unsigned int vertexCount)
+{
+	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; ++vertexIndex, ++x, ++y, ++z) {
+		out_points[vertexIndex].x = x[0];
+		out_points[vertexIndex].y = y[0];
+		out_points[vertexIndex].z = z[0];
+		out_points[vertexIndex].w = 1.0;
+	}
+}
+
 MStatus DeltaMush::getNeighbours(MObject & mesh, unsigned int vertexCount)
 {
 	neighbours.resize(vertexCount * MAX_NEIGHBOURS);
@@ -320,18 +341,36 @@ MStatus DeltaMush::getNeighbours(MObject & mesh, unsigned int vertexCount)
 
 MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPointArray & out_smoothedPositions, unsigned int iterations, double weight)
 {
+	// TODO : RESOLVE ERROR FOR NON /40 VERTEX COUNT
 	unsigned int vertexCount{ verticesPositions.length() };
 	out_smoothedPositions.setLength(vertexCount);
 
+	double* verticesX = new double[vertexCount];
+	double* verticesY = new double[vertexCount];
+	double* verticesZ = new double[vertexCount];
+	decomposePointArray(verticesPositions, verticesX, verticesY, verticesZ, vertexCount);
+
 	// A copy is necessary to avoid losing the original data trough the computations while working iteratively on the smoothed positions
 	MPointArray verticesPositionsCopy{ verticesPositions };
+	double* verticesCopyX = new double[vertexCount];
+	std::copy(verticesX, verticesX + vertexCount, verticesCopyX);
+
+	double* verticesCopyY = new double[vertexCount];
+	std::copy(verticesY, verticesY + vertexCount, verticesCopyY);
+
+	double* verticesCopyZ = new double[vertexCount];
+	std::copy(verticesZ, verticesZ + vertexCount, verticesCopyZ);
 
 	//Declaring the data needed by the loop
 	MVector averagePosition{};
+	__m256d averageX;
+	__m256d averageY;
+	__m256d averageZ;
 
+	__m256d weighVector{ _mm256_set1_pd(weight) };
 	double* averagePtr{ &averagePosition.x };
 	const double*  vertexPtr{};
-	const int* neighbourPtr{};
+	const int* neighbourPtr{ &neighbours[0]};
 	double averageFactor{};
 
 	int currentVertex{};
@@ -340,44 +379,64 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 	double* verticesPositionsCopyPtr{ &verticesPositionsCopy[0].x };
 
 	for (unsigned int iterationIndex{ 0 }; iterationIndex < iterations; ++iterationIndex) {
-
-		// Inrementing the pointer by four makes us jumps four double ( x, y, z , w ) positioning us on the next MPoint members
-		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; ++vertexIndex) {
-			//resetting the vector
-			averagePtr[0] = 0.0;
-			averagePtr[1] = 0.0;
-			averagePtr[2] = 0.0;
+		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex += 4) {
+			averageX = _mm256_setzero_pd();
+			averageY = _mm256_setzero_pd();
+			averageZ = _mm256_setzero_pd();
 
 			neighbourPtr = &neighbours[vertexIndex * 4];
 			for (unsigned int neighbourIndex{ 0 }; neighbourIndex < MAX_NEIGHBOURS; ++neighbourIndex, ++neighbourPtr) {
-				vertexPtr = verticesPositionsCopyPtr + (neighbourPtr[0] * 4);
+				__m256d neighboursX = _mm256_setr_pd(verticesCopyX[neighbourPtr[0]], verticesCopyX[neighbourPtr[0 + 4]], verticesCopyX[neighbourPtr[0 + 8]], verticesCopyX[neighbourPtr[0 + 12]]);
+				__m256d neighboursY = _mm256_setr_pd(verticesCopyY[neighbourPtr[0]], verticesCopyY[neighbourPtr[0 + 4]], verticesCopyY[neighbourPtr[0 + 8]], verticesCopyY[neighbourPtr[0 + 12]]);
+				__m256d neighboursZ = _mm256_setr_pd(verticesCopyZ[neighbourPtr[0]], verticesCopyZ[neighbourPtr[0 + 4]], verticesCopyZ[neighbourPtr[0 + 8]], verticesCopyZ[neighbourPtr[0 + 12]]);
 
-				averagePtr[0] += vertexPtr[0];
-				averagePtr[1] += vertexPtr[1];
-				averagePtr[2] += vertexPtr[2];
+				averageX = _mm256_add_pd(averageX, neighboursX);
+				averageY = _mm256_add_pd(averageY, neighboursY);
+				averageZ = _mm256_add_pd(averageZ, neighboursZ);
 			}
 
 			// Divides the accumulated vector to average it
 			averageFactor = (1.0 / MAX_NEIGHBOURS);
-			averagePtr[0] *= averageFactor;
-			averagePtr[1] *= averageFactor;
-			averagePtr[2] *= averageFactor;
+			__m256d averageFactorVec = _mm256_set1_pd(averageFactor);
 
-			// Store the final weighted position
-			currentVertex = vertexIndex * 4;
-			outSmoothedPositionsPtr[currentVertex] = ((averagePtr[0] - verticesPositionsCopyPtr[currentVertex]) * weight) + verticesPositionsCopyPtr[currentVertex];
-			outSmoothedPositionsPtr[currentVertex + 1] = ((averagePtr[1] - verticesPositionsCopyPtr[currentVertex + 1]) * weight) + verticesPositionsCopyPtr[currentVertex + 1];
-			outSmoothedPositionsPtr[currentVertex + 2] = ((averagePtr[2] - verticesPositionsCopyPtr[currentVertex + 2]) * weight) + verticesPositionsCopyPtr[currentVertex + 2];
-			outSmoothedPositionsPtr[currentVertex + 3] = 1.0;
+			averageX = _mm256_mul_pd(averageX, averageFactorVec);
+			averageY = _mm256_mul_pd(averageY, averageFactorVec);
+			averageZ = _mm256_mul_pd(averageZ, averageFactorVec);
+
+			__m256d verticesCopyXVector = _mm256_load_pd(verticesCopyX + vertexIndex);
+			__m256d verticesCopyYVector = _mm256_load_pd(verticesCopyY + vertexIndex);
+			__m256d verticesCopyZVector = _mm256_load_pd(verticesCopyZ + vertexIndex);
+
+			averageX = _mm256_sub_pd(averageX, verticesCopyXVector);
+			averageY = _mm256_sub_pd(averageY, verticesCopyYVector);
+			averageZ = _mm256_sub_pd(averageZ, verticesCopyZVector);
+
+			averageX = _mm256_mul_pd(averageX, weighVector);
+			averageY = _mm256_mul_pd(averageY, weighVector);
+			averageZ = _mm256_mul_pd(averageZ, weighVector);
+
+			averageX = _mm256_add_pd(averageX, verticesCopyXVector);
+			averageY = _mm256_add_pd(averageY, verticesCopyYVector);
+			averageZ = _mm256_add_pd(averageZ, verticesCopyZVector);
+
+			_mm256_store_pd(verticesX + vertexIndex, averageX);
+			_mm256_store_pd(verticesY + vertexIndex, averageY);
+			_mm256_store_pd(verticesZ + vertexIndex, averageZ);
 		}
 
-		std::swap(outSmoothedPositionsPtr, verticesPositionsCopyPtr);
+		std::swap(verticesX, verticesCopyX);
+		std::swap(verticesY, verticesCopyY);
+		std::swap(verticesZ, verticesCopyZ);
 	}
 
-	// If the number of iterations is even we have to copy the updated data in out__smoothed positions 
-	if ((iterations % 2) == 0) {
-		out_smoothedPositions.copy(verticesPositionsCopy);
-	}
+	composePointArray(verticesCopyX, verticesCopyY, verticesCopyZ, out_smoothedPositions, vertexCount);
+
+	delete[] verticesX;
+	delete[] verticesY;
+	delete[] verticesZ;
+	delete[] verticesCopyX;
+	delete[] verticesCopyY;
+	delete[] verticesCopyZ;
 
 	return MStatus::kSuccess;
 }

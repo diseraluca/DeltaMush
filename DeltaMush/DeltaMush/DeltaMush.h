@@ -36,6 +36,9 @@ public:
 	virtual MStatus deform(MDataBlock & block, MItGeometry & iterator, const MMatrix & matrix, unsigned int multiIndex) override;
 
 private:
+	void decomposePointArray(const MPointArray& points, double* out_x, double* out_y, double* out_z, unsigned int vertexCount);
+	void composePointArray(double* x, double* y, double* z, MPointArray& out_points, unsigned int vertexCount);
+
 	// Get the neighbours vertices per-vertex of mesh. Stores them in the this->neighbours
 	MStatus getNeighbours(MObject& mesh, unsigned int vertexCount);
 
