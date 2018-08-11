@@ -38,6 +38,7 @@ const double DeltaMush::AVERAGE_FACTOR{ 1.0 / MAX_NEIGHBOURS };
 
 DeltaMush::DeltaMush()
 	:isInitialized{ false },
+	 paddedCount{ 0 },
 	 neighbours{},
 	 deltas{},
 	 deltaMagnitudes{},
@@ -140,6 +141,14 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		if (!referenceMeshPlug.isConnected()) {
 			MGlobal::displayWarning(this->name() + ": referenceMesh is not connected. Please connect a mesh");
 			return MStatus::kUnknownParameter;
+		}
+
+		unsigned int countModulo{ vertexCount % MAX_NEIGHBOURS };
+		if (countModulo != 0) {
+			paddedCount = vertexCount + (MAX_NEIGHBOURS - countModulo);
+		}
+		else {
+			paddedCount = vertexCount;
 		}
 
 		// Retrieves the positions for the reference mesh
@@ -309,7 +318,8 @@ void DeltaMush::composePointArray(double * x, double * y, double * z, MPointArra
 
 MStatus DeltaMush::getNeighbours(MObject & mesh, unsigned int vertexCount)
 {
-	neighbours.resize((vertexCount + (vertexCount % MAX_NEIGHBOURS)) * MAX_NEIGHBOURS);
+	neighbours.resize(paddedCount * MAX_NEIGHBOURS);
+	std::fill(neighbours.begin(), neighbours.end(), 0.0);
 
 	MItMeshVertex meshVtxIt{ mesh };
 	MIntArray temporaryNeighbours{};
@@ -337,9 +347,6 @@ MStatus DeltaMush::getNeighbours(MObject & mesh, unsigned int vertexCount)
 		}
 	}
 
-	// Padding the array to be divisible by four
-	std::memset(&neighbours[(vertexCount * MAX_NEIGHBOURS) + MAX_NEIGHBOURS], 0U, (sizeof(double) * ((vertexCount % MAX_NEIGHBOURS) * MAX_NEIGHBOURS)));
-
 	return MStatus::kSuccess;
 }
 
@@ -348,21 +355,21 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 	unsigned int vertexCount{ verticesPositions.length() };
 	out_smoothedPositions.setLength(vertexCount);
 
-	double* verticesX = new double[vertexCount + (vertexCount % MAX_NEIGHBOURS)];
-	double* verticesY = new double[vertexCount + (vertexCount % MAX_NEIGHBOURS)];
-	double* verticesZ = new double[vertexCount + (vertexCount % MAX_NEIGHBOURS)];
+	double* verticesX = new double[paddedCount]();
+	double* verticesY = new double[paddedCount]();
+	double* verticesZ = new double[paddedCount]();
 	decomposePointArray(verticesPositions, verticesX, verticesY, verticesZ, vertexCount);
 
 	// A copy is necessary to avoid losing the original data trough the computations while working iteratively on the smoothed positions
 	MPointArray verticesPositionsCopy{ verticesPositions };
-	double* verticesCopyX = new double[vertexCount + (vertexCount % MAX_NEIGHBOURS)];
-	std::copy(verticesX, verticesX + vertexCount, verticesCopyX);
+	double* verticesCopyX = new double[paddedCount];
+	std::copy(verticesX, verticesX + paddedCount, verticesCopyX);
 
-	double* verticesCopyY = new double[vertexCount + (vertexCount % MAX_NEIGHBOURS)];
-	std::copy(verticesY, verticesY + vertexCount, verticesCopyY);
+	double* verticesCopyY = new double[paddedCount];
+	std::copy(verticesY, verticesY + paddedCount, verticesCopyY);
 
-	double* verticesCopyZ = new double[vertexCount + (vertexCount % MAX_NEIGHBOURS)];
-	std::copy(verticesZ, verticesZ + vertexCount, verticesCopyZ);
+	double* verticesCopyZ = new double[paddedCount];
+	std::copy(verticesZ, verticesZ + paddedCount, verticesCopyZ);
 
 	//Declaring the data needed by the loop
 	__m256d averageX;

@@ -70,6 +70,8 @@ public:
 private:
 	bool isInitialized;
 
+	unsigned int paddedCount;
+
 	std::vector<int> neighbours;
 	std::vector<MVectorArray> deltas;
 	std::vector<double> deltaMagnitudes;
