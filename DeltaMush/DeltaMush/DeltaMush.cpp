@@ -39,11 +39,23 @@ const double DeltaMush::AVERAGE_FACTOR{ 1.0 / MAX_NEIGHBOURS };
 DeltaMush::DeltaMush()
 	:isInitialized{ false },
 	 paddedCount{ 0 },
+	 verticesX{ nullptr },
+	 verticesY{ nullptr },
+	 verticesZ {nullptr },
 	 neighbours{},
 	 deltas{},
 	 deltaMagnitudes{},
 	 perVertexWeights{}
 {
+}
+
+DeltaMush::~DeltaMush()
+{
+	if (verticesX) {
+		delete[] verticesX;
+		delete[] verticesY;
+		delete[] verticesZ;
+	}
 }
 
 void * DeltaMush::creator()
@@ -159,6 +171,17 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		referenceMeshVertexPositions.setLength(vertexCount);
 		referenceMeshFn.getPoints(referenceMeshVertexPositions);
 
+		if (verticesX) {
+			delete[] verticesX;
+			delete[] verticesY;
+			delete[] verticesZ;
+		}
+
+		verticesX = new double[paddedCount]();
+		verticesY = new double[paddedCount]();
+		verticesZ = new double[paddedCount]();
+		decomposePointArray(referenceMeshVertexPositions, verticesX, verticesY, verticesZ, vertexCount);
+
 		// Build the neighbours array 
 		getNeighbours(referenceMeshValue, vertexCount);
 
@@ -174,6 +197,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 
 	MPointArray meshVertexPositions{};
 	iterator.allPositions(meshVertexPositions);
+	decomposePointArray(meshVertexPositions, verticesX, verticesY, verticesZ, vertexCount);
 
 	// Caculate the smoothed positions for the deformed mesh
 	MPointArray meshSmoothedPositions{};
@@ -355,13 +379,7 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 	unsigned int vertexCount{ verticesPositions.length() };
 	out_smoothedPositions.setLength(vertexCount);
 
-	double* verticesX = new double[paddedCount]();
-	double* verticesY = new double[paddedCount]();
-	double* verticesZ = new double[paddedCount]();
-	decomposePointArray(verticesPositions, verticesX, verticesY, verticesZ, vertexCount);
-
 	// A copy is necessary to avoid losing the original data trough the computations while working iteratively on the smoothed positions
-	MPointArray verticesPositionsCopy{ verticesPositions };
 	double* verticesCopyX = new double[paddedCount];
 	std::copy(verticesX, verticesX + paddedCount, verticesCopyX);
 
@@ -432,9 +450,6 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 
 	composePointArray(verticesCopyX, verticesCopyY, verticesCopyZ, out_smoothedPositions, vertexCount);
 
-	delete[] verticesX;
-	delete[] verticesY;
-	delete[] verticesZ;
 	delete[] verticesCopyX;
 	delete[] verticesCopyY;
 	delete[] verticesCopyZ;

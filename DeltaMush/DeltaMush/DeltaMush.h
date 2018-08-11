@@ -28,6 +28,7 @@
 class DeltaMush : public MPxDeformerNode {
 public:
 	DeltaMush();
+	~DeltaMush();
 
 	static void*    creator();
 	static MStatus  initialize();
@@ -71,6 +72,10 @@ private:
 	bool isInitialized;
 
 	unsigned int paddedCount;
+
+	double* verticesX;
+	double* verticesY;
+	double* verticesZ;
 
 	std::vector<int> neighbours;
 	std::vector<MVectorArray> deltas;
