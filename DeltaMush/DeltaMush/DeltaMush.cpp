@@ -43,6 +43,9 @@ DeltaMush::DeltaMush()
 	 verticesY{ nullptr },
 	 verticesZ {nullptr },
 	 neighbours{},
+	 deltaX{},
+	 deltaY{},
+	 deltaZ{},
 	 deltas{},
 	 deltaMagnitudes{},
 	 perVertexWeights{}
@@ -55,6 +58,12 @@ DeltaMush::~DeltaMush()
 		delete[] verticesX;
 		delete[] verticesY;
 		delete[] verticesZ;
+	}
+
+	if (smoothedX) {
+		delete[] smoothedX;
+		delete[] smoothedY;
+		delete[] smoothedZ;
 	}
 }
 
@@ -175,12 +184,19 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 			delete[] verticesX;
 			delete[] verticesY;
 			delete[] verticesZ;
+			delete[] smoothedX;
+			delete[] smoothedY;
+			delete[] smoothedZ;
 		}
 
 		verticesX = new double[paddedCount]();
 		verticesY = new double[paddedCount]();
 		verticesZ = new double[paddedCount]();
 		decomposePointArray(referenceMeshVertexPositions, verticesX, verticesY, verticesZ, vertexCount);
+
+		smoothedX = new double[paddedCount]();
+		smoothedY = new double[paddedCount]();
+		smoothedZ = new double[paddedCount]();
 
 		// Build the neighbours array 
 		getNeighbours(referenceMeshValue, vertexCount);
@@ -459,12 +475,21 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 
 MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPointArray & smoothedPositions, unsigned int vertexCount)
 {
-	deltas.resize(vertexCount);
-	deltaMagnitudes.resize(vertexCount);
+	deltas.resize(paddedCount);
+	deltaMagnitudes.resize(paddedCount);
+
+	deltaX.resize(paddedCount);
+	deltaY.resize(paddedCount);
+	deltaZ.resize(paddedCount);
+
+	decomposePointArray(smoothedPositions, smoothedX, smoothedY, smoothedZ, vertexCount);
 
 	// Declare the data needed by the loop
 	MVector delta{};
 	double *deltaPtr{ &delta.x };
+	__m256d deltaX{};
+	__m256d deltaY{};
+	__m256d deltaZ{};
 
 	const double *vertexPositionsPtr{ &vertexPositions[0].x };
 	const double *smoothedPositionsPtr{ &smoothedPositions[0].x };
@@ -474,28 +499,65 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 	double* normalPtr{ &tangentSpaceMatrix.matrix[1][0] };
 	double* binormalPtr{ &tangentSpaceMatrix.matrix[2][0] };
 
-	double length{};
-	double factor{};
+	int* neighbourPtr{ &neighbours[0] };
 
-	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; ++vertexIndex, vertexPositionsPtr += 4) {
-		delta[0] = vertexPositionsPtr[0] - smoothedPositionsPtr[vertexIndex * 4];
+	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex += 4, vertexPositionsPtr += 4, neighbourPtr += 13) {
+		/*delta[0] = vertexPositionsPtr[0] - smoothedPositionsPtr[vertexIndex * 4];
 		delta[1] = vertexPositionsPtr[1] - smoothedPositionsPtr[vertexIndex * 4 + 1];
-		delta[2] = vertexPositionsPtr[2] - smoothedPositionsPtr[vertexIndex * 4 + 2];
+		delta[2] = vertexPositionsPtr[2] - smoothedPositionsPtr[vertexIndex * 4 + 2];*/
+		__m256d smoothedPositionsX = _mm256_load_pd(smoothedX + vertexIndex);
+		__m256d smoothedPositionsY = _mm256_load_pd(smoothedY + vertexIndex);
+		__m256d smoothedPositionsZ = _mm256_load_pd(smoothedZ + vertexIndex);
 
-		deltaMagnitudes[vertexIndex] = delta.length();
+		deltaX = _mm256_sub_pd(_mm256_load_pd(verticesX + vertexIndex), smoothedPositionsX);
+		deltaY = _mm256_sub_pd(_mm256_load_pd(verticesY + vertexIndex), smoothedPositionsY);
+		deltaZ = _mm256_sub_pd(_mm256_load_pd(verticesZ + vertexIndex), smoothedPositionsZ);
 
-		deltas[vertexIndex].setLength(DELTA_COUNT);
-		for (unsigned int neighbourIndex{ 0 }; neighbourIndex < DELTA_COUNT; ++neighbourIndex) {
+		/*deltaMagnitudes[vertexIndex] = delta.length();*/
+		// Calculate the lenght of the array : sqrt(x^2 + y^2 + z^2)
+		__m256d length = _mm256_sqrt_pd(_mm256_add_pd(_mm256_mul_pd(deltaZ, deltaZ), _mm256_add_pd(_mm256_mul_pd(deltaX, deltaX), _mm256_mul_pd(deltaY, deltaY))));
+		_mm256_store_pd(&deltaMagnitudes[vertexIndex], length);
+
+		for (unsigned int neighbourIndex{ 0 }; neighbourIndex < DELTA_COUNT; ++neighbourIndex, ++neighbourPtr) {
 			// Calculate the vectors between the current vertex and two of its neighbours
-			tangentPtr[0] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex] * 4] - smoothedPositionsPtr[vertexIndex * 4];
-			tangentPtr[1] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex] * 4 + 1] - smoothedPositionsPtr[vertexIndex * 4 + 1];
-			tangentPtr[2] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex] * 4 + 2] - smoothedPositionsPtr[vertexIndex * 4 + 2];
+			//tangentPtr[0] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex] * 4] - smoothedPositionsPtr[vertexIndex * 4];
+			//tangentPtr[1] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex] * 4 + 1] - smoothedPositionsPtr[vertexIndex * 4 + 1];
+			//tangentPtr[2] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex] * 4 + 2] - smoothedPositionsPtr[vertexIndex * 4 + 2];
+			__m256d neighboursPositionX = _mm256_setr_pd(smoothedX[neighbourPtr[0]], smoothedX[neighbourPtr[0 + 4]], smoothedX[neighbourPtr[0 + 8]], smoothedX[neighbourPtr[0 + 12]]);
+			__m256d neighboursPositionY = _mm256_setr_pd(smoothedY[neighbourPtr[0]], smoothedY[neighbourPtr[0 + 4]], smoothedY[neighbourPtr[0 + 8]], smoothedY[neighbourPtr[0 + 12]]);
+			__m256d neighboursPositionZ = _mm256_setr_pd(smoothedZ[neighbourPtr[0]], smoothedZ[neighbourPtr[0 + 4]], smoothedZ[neighbourPtr[0 + 8]], smoothedZ[neighbourPtr[0 + 12]]);
 
-			normalPtr[0] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex + 1] * 4] - smoothedPositionsPtr[vertexIndex * 4];
+			__m256d tangentX = _mm256_sub_pd(neighboursPositionX, smoothedPositionsX);
+			__m256d tangentY = _mm256_sub_pd(neighboursPositionY, smoothedPositionsY);
+			__m256d tangentZ = _mm256_sub_pd(neighboursPositionZ, smoothedPositionsZ);
+
+			length = _mm256_sqrt_pd(_mm256_add_pd(_mm256_mul_pd(tangentZ, tangentZ), _mm256_add_pd(_mm256_mul_pd(tangentX, tangentX), _mm256_mul_pd(tangentY, tangentY))));
+			__m256d factor = _mm256_div_pd(_mm256_set1_pd(1.0), length);
+
+			tangentX = _mm256_mul_pd(tangentX, factor);
+			tangentY = _mm256_mul_pd(tangentY, factor);
+			tangentZ = _mm256_mul_pd(tangentZ, factor);
+
+			neighboursPositionX = _mm256_setr_pd(smoothedX[neighbourPtr[1]], smoothedX[neighbourPtr[1 + 4]], smoothedX[neighbourPtr[1 + 8]], smoothedX[neighbourPtr[1 + 12]]);
+			neighboursPositionY = _mm256_setr_pd(smoothedY[neighbourPtr[1]], smoothedY[neighbourPtr[1 + 4]], smoothedY[neighbourPtr[1 + 8]], smoothedY[neighbourPtr[1 + 12]]);
+			neighboursPositionZ = _mm256_setr_pd(smoothedZ[neighbourPtr[1]], smoothedZ[neighbourPtr[1 + 4]], smoothedZ[neighbourPtr[1 + 8]], smoothedZ[neighbourPtr[1 + 12]]);
+
+			__m256d normalX = _mm256_sub_pd(neighboursPositionX, smoothedPositionsX);
+			__m256d normalY = _mm256_sub_pd(neighboursPositionY, smoothedPositionsY);
+			__m256d normalZ = _mm256_sub_pd(neighboursPositionZ, smoothedPositionsZ);
+
+			length = _mm256_sqrt_pd(_mm256_add_pd(_mm256_mul_pd(normalZ, normalZ), _mm256_add_pd(_mm256_mul_pd(normalX, normalX), _mm256_mul_pd(normalY, normalY))));
+			factor = _mm256_div_pd(_mm256_set1_pd(1.0), length);
+
+			normalX = _mm256_mul_pd(normalX, factor);
+			normalY = _mm256_mul_pd(normalY, factor);
+			normalZ = _mm256_mul_pd(normalZ, factor);
+
+			/*normalPtr[0] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex + 1] * 4] - smoothedPositionsPtr[vertexIndex * 4];
 			normalPtr[1] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex + 1] * 4 + 1] - smoothedPositionsPtr[vertexIndex * 4 + 1];
-			normalPtr[2] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex + 1] * 4 + 2] - smoothedPositionsPtr[vertexIndex * 4 + 2];
+			normalPtr[2] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex + 1] * 4 + 2] - smoothedPositionsPtr[vertexIndex * 4 + 2];*/
 
-			length = std::sqrt(tangentPtr[0] * tangentPtr[0] + tangentPtr[1] * tangentPtr[1] + tangentPtr[2] * tangentPtr[2]);
+			/*length = std::sqrt(tangentPtr[0] * tangentPtr[0] + tangentPtr[1] * tangentPtr[1] + tangentPtr[2] * tangentPtr[2]);
 
 			factor = 1.0 / length;
 			tangentPtr[0] *= factor;
@@ -507,7 +569,7 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 			factor = 1.0 / length;
 			normalPtr[0] *= factor;
 			normalPtr[1] *= factor;
-			normalPtr[2] *= factor;
+			normalPtr[2] *= factor;*/
 
 			// Ensures  axis orthogonality through cross product.
 			// Cross product is calculated in the following code as:

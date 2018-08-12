@@ -77,7 +77,16 @@ private:
 	double* verticesY;
 	double* verticesZ;
 
+	double* smoothedX;
+	double* smoothedY;
+	double* smoothedZ;
+
 	std::vector<int> neighbours;
+
+	std::vector<double> deltaX;
+	std::vector<double> deltaY;
+	std::vector<double> deltaZ;
+
 	std::vector<MVectorArray> deltas;
 	std::vector<double> deltaMagnitudes;
 	std::vector<float> perVertexWeights;
