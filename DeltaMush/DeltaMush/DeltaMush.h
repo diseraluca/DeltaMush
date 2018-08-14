@@ -83,9 +83,9 @@ private:
 
 	std::vector<int> neighbours;
 
-	std::vector<double> deltaX;
-	std::vector<double> deltaY;
-	std::vector<double> deltaZ;
+	std::vector<double> deltasX;
+	std::vector<double> deltasY;
+	std::vector<double> deltasZ;
 
 	std::vector<MVectorArray> deltas;
 	std::vector<double> deltaMagnitudes;

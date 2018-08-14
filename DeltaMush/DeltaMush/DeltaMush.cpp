@@ -43,9 +43,9 @@ DeltaMush::DeltaMush()
 	 verticesY{ nullptr },
 	 verticesZ {nullptr },
 	 neighbours{},
-	 deltaX{},
-	 deltaY{},
-	 deltaZ{},
+	 deltasX{},
+	 deltasY{},
+	 deltasZ{},
 	 deltas{},
 	 deltaMagnitudes{},
 	 perVertexWeights{}
@@ -478,9 +478,9 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 	deltas.resize(paddedCount);
 	deltaMagnitudes.resize(paddedCount);
 
-	deltaX.resize(paddedCount);
-	deltaY.resize(paddedCount);
-	deltaZ.resize(paddedCount);
+	deltasX.resize(paddedCount * MAX_NEIGHBOURS * DELTA_COUNT);
+	deltasY.resize(paddedCount * MAX_NEIGHBOURS * DELTA_COUNT);
+	deltasZ.resize(paddedCount * MAX_NEIGHBOURS * DELTA_COUNT);
 
 	decomposePointArray(smoothedPositions, smoothedX, smoothedY, smoothedZ, vertexCount);
 
@@ -574,17 +574,87 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 			// Ensures  axis orthogonality through cross product.
 			// Cross product is calculated in the following code as:
 			// crossVector = [(y1 * z2 - z1 * y2), (z1 * x2 - x1 * z2), (x1 * y2 - y1 * x2)]
-			binormalPtr[0] = tangentPtr[1] * normalPtr[2] - tangentPtr[2] * normalPtr[1];
-			binormalPtr[1] = tangentPtr[2] * normalPtr[0] - tangentPtr[0] * normalPtr[2];
-			binormalPtr[2] = tangentPtr[0] * normalPtr[1] - tangentPtr[1] * normalPtr[0];
+			//binormalPtr[0] = tangentPtr[1] * normalPtr[2] - tangentPtr[2] * normalPtr[1];
+			//binormalPtr[1] = tangentPtr[2] * normalPtr[0] - tangentPtr[0] * normalPtr[2];
+			//binormalPtr[2] = tangentPtr[0] * normalPtr[1] - tangentPtr[1] * normalPtr[0];
+			__m256d binormalX = _mm256_sub_pd(_mm256_mul_pd(tangentY, normalZ), _mm256_mul_pd(tangentZ, normalY));
+			__m256d binormalY = _mm256_sub_pd(_mm256_mul_pd(tangentZ, normalX), _mm256_mul_pd(tangentX, normalZ));
+			__m256d binormalZ = _mm256_sub_pd(_mm256_mul_pd(tangentX, normalY), _mm256_mul_pd(tangentY, normalX));
 
-			normalPtr[0] = tangentPtr[1] * binormalPtr[2] - tangentPtr[2] * binormalPtr[1];
+		/*	normalPtr[0] = tangentPtr[1] * binormalPtr[2] - tangentPtr[2] * binormalPtr[1];
 			normalPtr[1] = tangentPtr[2] * binormalPtr[0] - tangentPtr[0] * binormalPtr[2];
-			normalPtr[2] = tangentPtr[0] * binormalPtr[1] - tangentPtr[1] * binormalPtr[0];
+			normalPtr[2] = tangentPtr[0] * binormalPtr[1] - tangentPtr[1] * binormalPtr[0];*/
+			normalX = _mm256_sub_pd(_mm256_mul_pd(tangentY, binormalZ), _mm256_mul_pd(tangentZ, binormalY));
+			normalY = _mm256_sub_pd(_mm256_mul_pd(tangentZ, binormalX), _mm256_mul_pd(tangentX, binormalZ));
+			normalZ = _mm256_sub_pd(_mm256_mul_pd(tangentX, binormalY), _mm256_mul_pd(tangentY, binormalX));
 
 			// Calculate the displacement Vector
-			deltas[vertexIndex][neighbourIndex] = tangentSpaceMatrix.inverse() * delta;
+			/*deltas[vertexIndex][neighbourIndex] = tangentSpaceMatrix.inverse() * delta;*/
+			deltaX = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentX, deltaX), _mm256_mul_pd(normalX, deltaX)), _mm256_mul_pd(binormalX, deltaX));
+			deltaY = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentY, deltaY), _mm256_mul_pd(normalY, deltaY)), _mm256_mul_pd(binormalY, deltaY));
+			deltaZ = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentZ, deltaZ), _mm256_mul_pd(normalZ, deltaZ)), _mm256_mul_pd(binormalZ, deltaZ));
+
+
+			_mm256_store_pd(&deltasX[0] + (vertexIndex * 12) + (neighbourIndex * 4), deltaX);
+			_mm256_store_pd(&deltasY[0] + (vertexIndex * 12) + (neighbourIndex * 4), deltaY);
+			_mm256_store_pd(&deltasZ[0] + (vertexIndex * 12) + (neighbourIndex * 4), deltaZ);
 		}
+	}
+
+	int deltaIndex = 0;
+	for (unsigned int vertexIndex = 0; vertexIndex < vertexCount; vertexIndex += 4, deltaIndex += 8) {
+		deltas[vertexIndex].setLength(DELTA_COUNT);
+		deltas[vertexIndex + 1].setLength(DELTA_COUNT);
+		deltas[vertexIndex + 2].setLength(DELTA_COUNT);
+		deltas[vertexIndex + 3].setLength(DELTA_COUNT);
+
+		deltas[vertexIndex][0].x = deltasX[deltaIndex];
+		deltas[vertexIndex][0].y = deltasY[deltaIndex];
+		deltas[vertexIndex][0].z = deltasZ[deltaIndex];
+
+		deltas[vertexIndex][1].x = deltasX[deltaIndex + 4];
+		deltas[vertexIndex][1].y = deltasY[deltaIndex + 4];
+		deltas[vertexIndex][1].z = deltasZ[deltaIndex + 4];
+
+		deltas[vertexIndex][2].x = deltasX[deltaIndex + 8];
+		deltas[vertexIndex][2].y = deltasY[deltaIndex + 8];
+		deltas[vertexIndex][2].z = deltasZ[deltaIndex + 8];
+
+		deltas[vertexIndex+1][0].x = deltasX[deltaIndex+1];
+		deltas[vertexIndex+1][0].y = deltasY[deltaIndex+1];
+		deltas[vertexIndex+1][0].z = deltasZ[deltaIndex+1];
+
+		deltas[vertexIndex+1][1].x = deltasX[deltaIndex + 4+1];
+		deltas[vertexIndex+1][1].y = deltasY[deltaIndex + 4+1];
+		deltas[vertexIndex+1][1].z = deltasZ[deltaIndex + 4+1];
+
+		deltas[vertexIndex+1][2].x = deltasX[deltaIndex + 8+1];
+		deltas[vertexIndex+1][2].y = deltasY[deltaIndex + 8+1];
+		deltas[vertexIndex+1][2].z = deltasZ[deltaIndex + 8+1];
+
+		deltas[vertexIndex+2][0].x = deltasX[deltaIndex+2];
+		deltas[vertexIndex+2][0].y = deltasY[deltaIndex+2];
+		deltas[vertexIndex+2][0].z = deltasZ[deltaIndex+2];
+
+		deltas[vertexIndex+2][1].x = deltasX[deltaIndex + 2 + 4];
+		deltas[vertexIndex+2][1].y = deltasY[deltaIndex + 2 + 4];
+		deltas[vertexIndex+2][1].z = deltasZ[deltaIndex +  2 + 4];
+
+		deltas[vertexIndex+2][2].x = deltasX[deltaIndex + 2 +8];
+		deltas[vertexIndex+2][2].y = deltasY[deltaIndex +2+ 8];
+		deltas[vertexIndex+2][2].z = deltasZ[deltaIndex +2+ 8];
+
+		deltas[vertexIndex+3][0].x = deltasX[deltaIndex+3];
+		deltas[vertexIndex+3][0].y = deltasY[deltaIndex+3];
+		deltas[vertexIndex+3][0].z = deltasZ[deltaIndex+3];
+
+		deltas[vertexIndex+3][1].x = deltasX[deltaIndex + 4+3];
+		deltas[vertexIndex+3][1].y = deltasY[deltaIndex + 4+3];
+		deltas[vertexIndex+3][1].z = deltasZ[deltaIndex + 4+3];
+
+		deltas[vertexIndex+3][2].x = deltasX[deltaIndex + 8+3];
+		deltas[vertexIndex+3][2].y = deltasY[deltaIndex + 8+3];
+		deltas[vertexIndex+3][2].z = deltasZ[deltaIndex + 8+3];
 	}
 
 	return MStatus::kSuccess;
