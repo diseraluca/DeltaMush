@@ -588,11 +588,24 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 			normalY = _mm256_sub_pd(_mm256_mul_pd(tangentZ, binormalX), _mm256_mul_pd(tangentX, binormalZ));
 			normalZ = _mm256_sub_pd(_mm256_mul_pd(tangentX, binormalY), _mm256_mul_pd(tangentY, binormalX));
 
+			//Scaling the crossed vector back
+			length = _mm256_add_pd(_mm256_mul_pd(normalZ, normalZ), _mm256_add_pd(_mm256_mul_pd(normalX, normalX), _mm256_mul_pd(normalY, normalY)));
+			factor = _mm256_div_pd(_mm256_set1_pd(1.0), length);
+			normalX = _mm256_mul_pd(normalX, factor);
+			normalY = _mm256_mul_pd(normalY, factor);
+			normalZ = _mm256_mul_pd(normalZ, factor);
+
+			length = _mm256_add_pd(_mm256_mul_pd(binormalZ, binormalZ), _mm256_add_pd(_mm256_mul_pd(binormalX, binormalX), _mm256_mul_pd(binormalY, binormalY)));
+			factor = _mm256_div_pd(_mm256_set1_pd(1.0), length);
+			binormalX = _mm256_mul_pd(binormalX, factor);
+			binormalY = _mm256_mul_pd(binormalY, factor);
+			binormalZ = _mm256_mul_pd(binormalZ, factor);
+
 			// Calculate the displacement Vector
 			/*deltas[vertexIndex][neighbourIndex] = tangentSpaceMatrix.inverse() * delta;*/
-			deltaX = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentX, deltaX), _mm256_mul_pd(normalX, deltaX)), _mm256_mul_pd(binormalX, deltaX));
-			deltaY = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentY, deltaY), _mm256_mul_pd(normalY, deltaY)), _mm256_mul_pd(binormalY, deltaY));
-			deltaZ = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentZ, deltaZ), _mm256_mul_pd(normalZ, deltaZ)), _mm256_mul_pd(binormalZ, deltaZ));
+			deltaX = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentX, deltaX), _mm256_mul_pd(normalX, deltaY)), _mm256_mul_pd(binormalX, deltaZ));
+			deltaY = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentY, deltaX), _mm256_mul_pd(normalY, deltaY)), _mm256_mul_pd(binormalY, deltaZ));
+			deltaZ = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentZ, deltaX), _mm256_mul_pd(normalZ, deltaY)), _mm256_mul_pd(binormalZ, deltaZ));
 
 
 			_mm256_store_pd(&deltasX[0] + (vertexIndex * 12) + (neighbourIndex * 4), deltaX);
