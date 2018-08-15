@@ -608,14 +608,14 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 			deltaZ = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentZ, deltaX), _mm256_mul_pd(normalZ, deltaY)), _mm256_mul_pd(binormalZ, deltaZ));
 
 
-			_mm256_store_pd(&deltasX[0] + (vertexIndex * 12) + (neighbourIndex * 4), deltaX);
-			_mm256_store_pd(&deltasY[0] + (vertexIndex * 12) + (neighbourIndex * 4), deltaY);
-			_mm256_store_pd(&deltasZ[0] + (vertexIndex * 12) + (neighbourIndex * 4), deltaZ);
+			_mm256_store_pd(&deltasX[0] + (vertexIndex * 3) + (neighbourIndex * 4), deltaX);
+			_mm256_store_pd(&deltasY[0] + (vertexIndex * 3) + (neighbourIndex * 4), deltaY);
+			_mm256_store_pd(&deltasZ[0] + (vertexIndex * 3) + (neighbourIndex * 4), deltaZ);
 		}
 	}
 
 	int deltaIndex = 0;
-	for (unsigned int vertexIndex = 0; vertexIndex < vertexCount; vertexIndex += 4, deltaIndex += 8) {
+	for (unsigned int vertexIndex = 0; vertexIndex < vertexCount; vertexIndex += 4, deltaIndex += 12) {
 		deltas[vertexIndex].setLength(DELTA_COUNT);
 		deltas[vertexIndex + 1].setLength(DELTA_COUNT);
 		deltas[vertexIndex + 2].setLength(DELTA_COUNT);
