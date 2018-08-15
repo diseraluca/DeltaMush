@@ -454,16 +454,17 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 			averageY = _mm256_add_pd(averageY, verticesCopyYVector);
 			averageZ = _mm256_add_pd(averageZ, verticesCopyZVector);
 
-			_mm256_store_pd(verticesX + vertexIndex, averageX);
-			_mm256_store_pd(verticesY + vertexIndex, averageY);
-			_mm256_store_pd(verticesZ + vertexIndex, averageZ);
+			_mm256_store_pd(smoothedX + vertexIndex, averageX);
+			_mm256_store_pd(smoothedY + vertexIndex, averageY);
+			_mm256_store_pd(smoothedZ + vertexIndex, averageZ);
 		}
 
-		std::swap(verticesX, verticesCopyX);
-		std::swap(verticesY, verticesCopyY);
-		std::swap(verticesZ, verticesCopyZ);
+		std::swap(smoothedX, verticesCopyX);
+		std::swap(smoothedY, verticesCopyY);
+		std::swap(smoothedZ, verticesCopyZ);
 	}
 
+	//TODO make average smoothing save its smoothed position in smoothedX
 	composePointArray(verticesCopyX, verticesCopyY, verticesCopyZ, out_smoothedPositions, vertexCount);
 
 	delete[] verticesCopyX;
