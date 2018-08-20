@@ -604,14 +604,14 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 
 			// Calculate the displacement Vector
 			/*deltas[vertexIndex][neighbourIndex] = tangentSpaceMatrix.inverse() * delta;*/
-			deltaX = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentX, deltaX), _mm256_mul_pd(normalX, deltaY)), _mm256_mul_pd(binormalX, deltaZ));
-			deltaY = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentY, deltaX), _mm256_mul_pd(normalY, deltaY)), _mm256_mul_pd(binormalY, deltaZ));
-			deltaZ = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentZ, deltaX), _mm256_mul_pd(normalZ, deltaY)), _mm256_mul_pd(binormalZ, deltaZ));
+			__m256d resultX = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentX, deltaX), _mm256_mul_pd(normalX, deltaY)), _mm256_mul_pd(binormalX, deltaZ));
+			__m256d resultY = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentY, deltaX), _mm256_mul_pd(normalY, deltaY)), _mm256_mul_pd(binormalY, deltaZ));
+			__m256d resultZ = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentZ, deltaX), _mm256_mul_pd(normalZ, deltaY)), _mm256_mul_pd(binormalZ, deltaZ));
 
 
-			_mm256_store_pd(&deltasX[0] + (vertexIndex * 3) + (neighbourIndex * 4), deltaX);
-			_mm256_store_pd(&deltasY[0] + (vertexIndex * 3) + (neighbourIndex * 4), deltaY);
-			_mm256_store_pd(&deltasZ[0] + (vertexIndex * 3) + (neighbourIndex * 4), deltaZ);
+			_mm256_store_pd(&deltasX[0] + (vertexIndex * 3) + (neighbourIndex * 4), resultX);
+			_mm256_store_pd(&deltasY[0] + (vertexIndex * 3) + (neighbourIndex * 4), resultY);
+			_mm256_store_pd(&deltasZ[0] + (vertexIndex * 3) + (neighbourIndex * 4), resultZ);
 		}
 	}
 
