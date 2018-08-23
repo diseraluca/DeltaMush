@@ -223,6 +223,13 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	MPointArray resultPositions{};
 	resultPositions.setLength(vertexCount);
 
+	std::vector<double> resultsX{};
+	resultsX.resize(paddedCount);
+	std::vector<double> resultsY{};
+	resultsY.resize(paddedCount);
+	std::vector<double> resultsZ{};
+	resultsZ.resize(paddedCount);
+
 	// Store the current values of the per-vertex weights
 	getPerVertexWeights(block, multiIndex, vertexCount);
 
@@ -249,89 +256,190 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	float envelopeValue{ block.inputValue(envelope).asFloat() };
 	double deltaWeightValue{ block.inputValue(deltaWeight).asDouble() };
 
-	for (int vertexIndex{ 0 }; vertexIndex < vertexCount; ++vertexIndex, resultPositionsPtr += 4, vertexPositionsPtr += 4) {
+	__m256d deltaX{};
+	__m256d deltaY{};
+	__m256d deltaZ{};
+
+	double * deltaXPtr{ &deltasX[0] };
+	double * deltaYPtr{ &deltasY[0] };
+	double * deltaZPtr{ &deltasZ[0] };
+
+	int* neighbourPtr{ &neighbours[0] };
+
+	for (int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex += 4, resultPositionsPtr += 4, vertexPositionsPtr += 4, neighbourPtr += 13) {
 		// resetting the delta vector
-		deltaPtr[0] = 0.0;
+		/*deltaPtr[0] = 0.0;
 		deltaPtr[1] = 0.0;
-		deltaPtr[2] = 0.0;
+		deltaPtr[2] = 0.0;*/
+		deltaX = _mm256_setzero_pd();
+		deltaY = _mm256_setzero_pd();
+		deltaZ = _mm256_setzero_pd();
 
-		for (unsigned int neighbourIndex{ 0 }; neighbourIndex < DELTA_COUNT; ++neighbourIndex) {
+		__m256d smoothedPositionsX = _mm256_load_pd(smoothedX + vertexIndex);
+		__m256d smoothedPositionsY = _mm256_load_pd(smoothedY + vertexIndex);
+		__m256d smoothedPositionsZ = _mm256_load_pd(smoothedZ + vertexIndex);
 
+		for (unsigned int neighbourIndex{ 0 }; neighbourIndex < DELTA_COUNT; ++neighbourIndex, ++neighbourPtr, deltaXPtr += 4, deltaYPtr += 4, deltaZPtr += 4) {
 			// Calculate the vectors between the current vertex and two of its neighbours
-			tangentPtr[0] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex] * 4] - smoothedPositionsPtr[vertexIndex * 4];
+			/*tangentPtr[0] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex] * 4] - smoothedPositionsPtr[vertexIndex * 4];
 			tangentPtr[1] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex] * 4 + 1] - smoothedPositionsPtr[vertexIndex * 4 + 1];
-			tangentPtr[2] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex] * 4 + 2] - smoothedPositionsPtr[vertexIndex * 4 + 2];
+			tangentPtr[2] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex] * 4 + 2] - smoothedPositionsPtr[vertexIndex * 4 + 2];*/
+			__m256d neighboursPositionX = _mm256_setr_pd(smoothedX[neighbourPtr[0]], smoothedX[neighbourPtr[0 + 4]], smoothedX[neighbourPtr[0 + 8]], smoothedX[neighbourPtr[0 + 12]]);
+			__m256d neighboursPositionY = _mm256_setr_pd(smoothedY[neighbourPtr[0]], smoothedY[neighbourPtr[0 + 4]], smoothedY[neighbourPtr[0 + 8]], smoothedY[neighbourPtr[0 + 12]]);
+			__m256d neighboursPositionZ = _mm256_setr_pd(smoothedZ[neighbourPtr[0]], smoothedZ[neighbourPtr[0 + 4]], smoothedZ[neighbourPtr[0 + 8]], smoothedZ[neighbourPtr[0 + 12]]);
 
-			normalPtr[0] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex + 1] * 4] - smoothedPositionsPtr[vertexIndex * 4];
+			__m256d tangentX = _mm256_sub_pd(neighboursPositionX, smoothedPositionsX);
+			__m256d tangentY = _mm256_sub_pd(neighboursPositionY, smoothedPositionsY);
+			__m256d tangentZ = _mm256_sub_pd(neighboursPositionZ, smoothedPositionsZ);
+
+			__m256d length = _mm256_sqrt_pd(_mm256_add_pd(_mm256_mul_pd(tangentZ, tangentZ), _mm256_add_pd(_mm256_mul_pd(tangentX, tangentX), _mm256_mul_pd(tangentY, tangentY))));
+			__m256d factor = _mm256_div_pd(_mm256_set1_pd(1.0), length);
+
+			tangentX = _mm256_mul_pd(tangentX, factor);
+			tangentY = _mm256_mul_pd(tangentY, factor);
+			tangentZ = _mm256_mul_pd(tangentZ, factor);
+
+			/*normalPtr[0] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex + 1] * 4] - smoothedPositionsPtr[vertexIndex * 4];
 			normalPtr[1] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex + 1] * 4 + 1] - smoothedPositionsPtr[vertexIndex * 4 + 1];
-			normalPtr[2] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex + 1] * 4 + 2] - smoothedPositionsPtr[vertexIndex * 4 + 2];
+			normalPtr[2] = smoothedPositionsPtr[neighbours[vertexIndex * MAX_NEIGHBOURS + neighbourIndex + 1] * 4 + 2] - smoothedPositionsPtr[vertexIndex * 4 + 2];*/
+			
+			neighboursPositionX = _mm256_setr_pd(smoothedX[neighbourPtr[1]], smoothedX[neighbourPtr[1 + 4]], smoothedX[neighbourPtr[1 + 8]], smoothedX[neighbourPtr[1 + 12]]);
+			neighboursPositionY = _mm256_setr_pd(smoothedY[neighbourPtr[1]], smoothedY[neighbourPtr[1 + 4]], smoothedY[neighbourPtr[1 + 8]], smoothedY[neighbourPtr[1 + 12]]);
+			neighboursPositionZ = _mm256_setr_pd(smoothedZ[neighbourPtr[1]], smoothedZ[neighbourPtr[1 + 4]], smoothedZ[neighbourPtr[1 + 8]], smoothedZ[neighbourPtr[1 + 12]]);
+
+			__m256d normalX = _mm256_sub_pd(neighboursPositionX, smoothedPositionsX);
+			__m256d normalY = _mm256_sub_pd(neighboursPositionY, smoothedPositionsY);
+			__m256d normalZ = _mm256_sub_pd(neighboursPositionZ, smoothedPositionsZ);
+
+			length = _mm256_sqrt_pd(_mm256_add_pd(_mm256_mul_pd(normalZ, normalZ), _mm256_add_pd(_mm256_mul_pd(normalX, normalX), _mm256_mul_pd(normalY, normalY))));
+			factor = _mm256_div_pd(_mm256_set1_pd(1.0), length);
+
+			normalX = _mm256_mul_pd(normalX, factor);
+			normalY = _mm256_mul_pd(normalY, factor);
+			normalZ = _mm256_mul_pd(normalZ, factor);
 
 			// Normalizes the two vectors.
 			// Vector normalization is calculated as follows:
 			// lenght of the vector -> sqrt(x*x + y*y + z*z)
 		    // [x, y, z] / length
-			length = std::sqrt(tangentPtr[0] * tangentPtr[0] + tangentPtr[1] * tangentPtr[1] + tangentPtr[2] * tangentPtr[2]);
+			//length = std::sqrt(tangentPtr[0] * tangentPtr[0] + tangentPtr[1] * tangentPtr[1] + tangentPtr[2] * tangentPtr[2]);
 
-			factor = 1.0 / length;
-			tangentPtr[0] *= factor;
-			tangentPtr[1] *= factor;
-			tangentPtr[2] *= factor;
+			//factor = 1.0 / length;
+			//tangentPtr[0] *= factor;
+			//tangentPtr[1] *= factor;
+			//tangentPtr[2] *= factor;
 
-			length = std::sqrt(normalPtr[0] * normalPtr[0] + normalPtr[1] * normalPtr[1] + normalPtr[2] * normalPtr[2]);
+			//length = std::sqrt(normalPtr[0] * normalPtr[0] + normalPtr[1] * normalPtr[1] + normalPtr[2] * normalPtr[2]);
 
-			factor = 1.0 / length;
-			normalPtr[0] *= factor;
-			normalPtr[1] *= factor;
-			normalPtr[2] *= factor;
+			//factor = 1.0 / length;
+			//normalPtr[0] *= factor;
+			//normalPtr[1] *= factor;
+			//normalPtr[2] *= factor;
 
 			// Ensures  axis orthogonality through cross product.
 			// Cross product is calculated in the following code as:
 			// crossVector = [(y1 * z2 - z1 * y2), (z1 * x2 - x1 * z2), (x1 * y2 - y1 * x2)]
-			binormalPtr[0] = tangentPtr[1] * normalPtr[2] - tangentPtr[2] * normalPtr[1];
+	/*		binormalPtr[0] = tangentPtr[1] * normalPtr[2] - tangentPtr[2] * normalPtr[1];
 			binormalPtr[1] = tangentPtr[2] * normalPtr[0] - tangentPtr[0] * normalPtr[2];
 			binormalPtr[2] = tangentPtr[0] * normalPtr[1] - tangentPtr[1] * normalPtr[0];
 
 			normalPtr[0] = tangentPtr[1] * binormalPtr[2] - tangentPtr[2] * binormalPtr[1];
 			normalPtr[1] = tangentPtr[2] * binormalPtr[0] - tangentPtr[0] * binormalPtr[2];
-			normalPtr[2] = tangentPtr[0] * binormalPtr[1] - tangentPtr[1] * binormalPtr[0];
+			normalPtr[2] = tangentPtr[0] * binormalPtr[1] - tangentPtr[1] * binormalPtr[0];*/
+
+			__m256d binormalX = _mm256_sub_pd(_mm256_mul_pd(tangentY, normalZ), _mm256_mul_pd(tangentZ, normalY));
+			__m256d binormalY = _mm256_sub_pd(_mm256_mul_pd(tangentZ, normalX), _mm256_mul_pd(tangentX, normalZ));
+			__m256d binormalZ = _mm256_sub_pd(_mm256_mul_pd(tangentX, normalY), _mm256_mul_pd(tangentY, normalX));
+
+			/*	normalPtr[0] = tangentPtr[1] * binormalPtr[2] - tangentPtr[2] * binormalPtr[1];
+			normalPtr[1] = tangentPtr[2] * binormalPtr[0] - tangentPtr[0] * binormalPtr[2];
+			normalPtr[2] = tangentPtr[0] * binormalPtr[1] - tangentPtr[1] * binormalPtr[0];*/
+			normalX = _mm256_sub_pd(_mm256_mul_pd(tangentY, binormalZ), _mm256_mul_pd(tangentZ, binormalY));
+			normalY = _mm256_sub_pd(_mm256_mul_pd(tangentZ, binormalX), _mm256_mul_pd(tangentX, binormalZ));
+			normalZ = _mm256_sub_pd(_mm256_mul_pd(tangentX, binormalY), _mm256_mul_pd(tangentY, binormalX));
+
+			__m256d deltaxX = _mm256_load_pd(deltaXPtr);
+			__m256d deltaxY = _mm256_load_pd(deltaYPtr);
+			__m256d deltaxZ = _mm256_load_pd(deltaZPtr);
+
+			__m256d resultX = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangentX, deltaxX), _mm256_mul_pd(tangentY, deltaxY)), _mm256_mul_pd(tangentZ, deltaxZ));
+			__m256d resultY = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(normalX, deltaxX), _mm256_mul_pd(normalY, deltaxY)), _mm256_mul_pd(normalZ, deltaxZ));
+			__m256d resultZ = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(binormalX, deltaxX), _mm256_mul_pd(binormalY, deltaxY)), _mm256_mul_pd(binormalZ, deltaxZ));
+
+			deltaX = _mm256_add_pd(deltaX, resultX);
+			deltaY = _mm256_add_pd(deltaY, resultY);
+			deltaZ = _mm256_add_pd(deltaZ, resultZ);
 
 			// Accumulate the displacement Vectors
 			// TODO : Provide a custom matrix*vector implementation to remove the intermediate MVector and transform the MMatrix into a simpler double[4][4]
-			MVector tangentSpaceDelta{ tangentSpaceMatrix * deltas[vertexIndex][neighbourIndex] };
+			/*MVector tangentSpaceDelta{ tangentSpaceMatrix * deltas[vertexIndex][neighbourIndex] };
 			deltaPtr[0] += tangentSpaceDelta.x;
 			deltaPtr[1] += tangentSpaceDelta.y;
-			deltaPtr[2] += tangentSpaceDelta.z;
+			deltaPtr[2] += tangentSpaceDelta.z;*/
 		}
 
 		// Averaging the delta
-		factor = (1.0 / DELTA_COUNT);
+		/*factor = (1.0 / DELTA_COUNT);
 		deltaPtr[0] *= factor;
 		deltaPtr[1] *= factor;
-		deltaPtr[2] *= factor;
+		deltaPtr[2] *= factor;*/
+
+		__m256d factor = _mm256_set1_pd(1.0 / DELTA_COUNT);
+		deltaX = _mm256_mul_pd(deltaX, factor);
+		deltaY = _mm256_mul_pd(deltaY, factor);
+		deltaZ = _mm256_mul_pd(deltaZ, factor);
 
 		// Scaling the delta
-		delta.normalize();
-		deltaPtr[0] *= (deltaMagnitudes[vertexIndex] * deltaWeightValue);
+		/*delta.normalize();*/
+		/*deltaPtr[0] *= (deltaMagnitudes[vertexIndex] * deltaWeightValue);
 		deltaPtr[1] *= (deltaMagnitudes[vertexIndex] * deltaWeightValue);
-		deltaPtr[2] *= (deltaMagnitudes[vertexIndex] * deltaWeightValue);
+		deltaPtr[2] *= (deltaMagnitudes[vertexIndex] * deltaWeightValue);*/
+		__m256d length = _mm256_sqrt_pd(_mm256_add_pd(_mm256_mul_pd(deltaZ, deltaZ), _mm256_add_pd(_mm256_mul_pd(deltaX, deltaX), _mm256_mul_pd(deltaY, deltaY))));
+		factor = _mm256_div_pd(_mm256_set1_pd(1.0), length);
+
+		deltaX = _mm256_mul_pd(deltaX, factor);
+		deltaY = _mm256_mul_pd(deltaY, factor);
+		deltaZ = _mm256_mul_pd(deltaZ, factor);
+
+		deltaX = _mm256_mul_pd(deltaX, _mm256_mul_pd(_mm256_load_pd(&deltaMagnitudes[vertexIndex]), _mm256_set1_pd(deltaWeightValue)));
+		deltaY = _mm256_mul_pd(deltaY, _mm256_mul_pd(_mm256_load_pd(&deltaMagnitudes[vertexIndex]), _mm256_set1_pd(deltaWeightValue)));
+		deltaZ = _mm256_mul_pd(deltaZ, _mm256_mul_pd(_mm256_load_pd(&deltaMagnitudes[vertexIndex]), _mm256_set1_pd(deltaWeightValue)));
 
 		// Finding the final position
-		resultPositionsPtr[0] = smoothedPositionsPtr[vertexIndex * 4] + deltaPtr[0];
+	/*	resultPositionsPtr[0] = smoothedPositionsPtr[vertexIndex * 4] + deltaPtr[0];
 		resultPositionsPtr[1] = smoothedPositionsPtr[vertexIndex * 4 + 1] + deltaPtr[1];
 		resultPositionsPtr[2] = smoothedPositionsPtr[vertexIndex * 4 + 2] + deltaPtr[2];
-		resultPositionsPtr[3] = 1.0;
+		resultPositionsPtr[3] = 1.0;*/
+		__m256d resultPositionX = _mm256_mul_pd(smoothedPositionsX, deltaX);
+		__m256d resultPositionY = _mm256_mul_pd(smoothedPositionsX, deltaY);
+		__m256d resultPositionZ = _mm256_mul_pd(smoothedPositionsX, deltaZ);
 
 		// We calculate the new definitive delta
-		deltaPtr[0] = resultPositionsPtr[0] - vertexPositionsPtr[0];
+		/*deltaPtr[0] = resultPositionsPtr[0] - vertexPositionsPtr[0];
 		deltaPtr[1] = resultPositionsPtr[1] - vertexPositionsPtr[1];
-		deltaPtr[2] = resultPositionsPtr[2] - vertexPositionsPtr[2];
+		deltaPtr[2] = resultPositionsPtr[2] - vertexPositionsPtr[2];*/
+		__m256d vertexX = _mm256_load_pd(verticesX + vertexIndex);
+		__m256d vertexY = _mm256_load_pd(verticesY + vertexIndex);
+		__m256d vertexZ = _mm256_load_pd(verticesZ + vertexIndex);
+
+		deltaX = _mm256_sub_pd(resultPositionX, vertexX);
+		deltaY = _mm256_sub_pd(resultPositionX, vertexY);
+		deltaZ = _mm256_sub_pd(resultPositionX, vertexZ);
 
 		// Setting the weighted final position
-		resultPositionsPtr[0] = vertexPositionsPtr[0] + (deltaPtr[0] * perVertexWeights[vertexIndex] * envelopeValue);
+		/*resultPositionsPtr[0] = vertexPositionsPtr[0] + (deltaPtr[0] * perVertexWeights[vertexIndex] * envelopeValue);
 		resultPositionsPtr[1] = vertexPositionsPtr[1] + (deltaPtr[1] * perVertexWeights[vertexIndex] * envelopeValue);
-		resultPositionsPtr[2] = vertexPositionsPtr[2] + (deltaPtr[2] * perVertexWeights[vertexIndex] * envelopeValue);
+		resultPositionsPtr[2] = vertexPositionsPtr[2] + (deltaPtr[2] * perVertexWeights[vertexIndex] * envelopeValue);*/
+		resultPositionX = _mm256_add_pd(vertexX, _mm256_mul_pd(deltaX, _mm256_mul_pd(_mm256_load_pd((double*)&perVertexWeights[vertexIndex]), _mm256_set1_pd(envelopeValue))));
+		resultPositionY = _mm256_add_pd(vertexX, _mm256_mul_pd(deltaY, _mm256_mul_pd(_mm256_load_pd((double*)&perVertexWeights[vertexIndex]), _mm256_set1_pd(envelopeValue))));
+		resultPositionZ = _mm256_add_pd(vertexX, _mm256_mul_pd(deltaZ, _mm256_mul_pd(_mm256_load_pd((double*)&perVertexWeights[vertexIndex]), _mm256_set1_pd(envelopeValue))));
+
+		_mm256_store_pd(&resultsX[vertexIndex], resultPositionX);
+		_mm256_store_pd(&resultsY[vertexIndex], resultPositionY);
+		_mm256_store_pd(&resultsZ[vertexIndex], resultPositionZ);
 	}
 
+	composePointArray(&resultsX[0], &resultsY[0], &resultsZ[0], resultPositions, vertexCount);
 	iterator.setAllPositions(resultPositions);
 
 	return MStatus::kSuccess;
