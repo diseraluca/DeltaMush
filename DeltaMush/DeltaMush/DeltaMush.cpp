@@ -410,9 +410,9 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		resultPositionsPtr[1] = smoothedPositionsPtr[vertexIndex * 4 + 1] + deltaPtr[1];
 		resultPositionsPtr[2] = smoothedPositionsPtr[vertexIndex * 4 + 2] + deltaPtr[2];
 		resultPositionsPtr[3] = 1.0;*/
-		__m256d resultPositionX = _mm256_mul_pd(smoothedPositionsX, deltaX);
-		__m256d resultPositionY = _mm256_mul_pd(smoothedPositionsX, deltaY);
-		__m256d resultPositionZ = _mm256_mul_pd(smoothedPositionsX, deltaZ);
+		__m256d resultPositionX = _mm256_add_pd(smoothedPositionsX, deltaX);
+		__m256d resultPositionY = _mm256_add_pd(smoothedPositionsY, deltaY);
+		__m256d resultPositionZ = _mm256_add_pd(smoothedPositionsZ, deltaZ);
 
 		// We calculate the new definitive delta
 		/*deltaPtr[0] = resultPositionsPtr[0] - vertexPositionsPtr[0];
@@ -423,16 +423,21 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		__m256d vertexZ = _mm256_load_pd(verticesZ + vertexIndex);
 
 		deltaX = _mm256_sub_pd(resultPositionX, vertexX);
-		deltaY = _mm256_sub_pd(resultPositionX, vertexY);
-		deltaZ = _mm256_sub_pd(resultPositionX, vertexZ);
+		deltaY = _mm256_sub_pd(resultPositionY, vertexY);
+		deltaZ = _mm256_sub_pd(resultPositionZ, vertexZ);
 
 		// Setting the weighted final position
 		/*resultPositionsPtr[0] = vertexPositionsPtr[0] + (deltaPtr[0] * perVertexWeights[vertexIndex] * envelopeValue);
 		resultPositionsPtr[1] = vertexPositionsPtr[1] + (deltaPtr[1] * perVertexWeights[vertexIndex] * envelopeValue);
 		resultPositionsPtr[2] = vertexPositionsPtr[2] + (deltaPtr[2] * perVertexWeights[vertexIndex] * envelopeValue);*/
-		resultPositionX = _mm256_add_pd(vertexX, _mm256_mul_pd(deltaX, _mm256_mul_pd(_mm256_load_pd((double*)&perVertexWeights[vertexIndex]), _mm256_set1_pd(envelopeValue))));
-		resultPositionY = _mm256_add_pd(vertexX, _mm256_mul_pd(deltaY, _mm256_mul_pd(_mm256_load_pd((double*)&perVertexWeights[vertexIndex]), _mm256_set1_pd(envelopeValue))));
-		resultPositionZ = _mm256_add_pd(vertexX, _mm256_mul_pd(deltaZ, _mm256_mul_pd(_mm256_load_pd((double*)&perVertexWeights[vertexIndex]), _mm256_set1_pd(envelopeValue))));
+		__m128 globalWeightsF{ _mm_load_ps(&perVertexWeights[vertexIndex]) };
+		globalWeightsF = _mm_mul_ps(globalWeightsF, _mm_set1_ps(envelopeValue));
+
+		__m256d globalWeights = _mm256_cvtps_pd(globalWeightsF);
+
+		resultPositionX = _mm256_add_pd(vertexX, _mm256_mul_pd(deltaX, globalWeights));
+		resultPositionY = _mm256_add_pd(vertexY, _mm256_mul_pd(deltaY, globalWeights));
+		resultPositionZ = _mm256_add_pd(vertexZ, _mm256_mul_pd(deltaZ, globalWeights));
 
 		_mm256_store_pd(&resultsX[vertexIndex], resultPositionX);
 		_mm256_store_pd(&resultsY[vertexIndex], resultPositionY);
