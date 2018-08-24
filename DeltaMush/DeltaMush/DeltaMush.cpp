@@ -219,6 +219,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	MPointArray meshSmoothedPositions{};
 	averageSmoothing(meshVertexPositions, meshSmoothedPositions, smoothingIterationsValue, smoothWeightValue);
 
+	decomposePointArray(meshSmoothedPositions, smoothedX, smoothedY, smoothedZ, vertexCount);
 	// Apply the deltas
 	MPointArray resultPositions{};
 	resultPositions.setLength(vertexCount);
