@@ -87,7 +87,6 @@ private:
 	std::vector<double> deltasY;
 	std::vector<double> deltasZ;
 
-	std::vector<MVectorArray> deltas;
 	std::vector<double> deltaMagnitudes;
 	std::vector<float> perVertexWeights;
 };
