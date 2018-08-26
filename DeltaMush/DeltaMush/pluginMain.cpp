@@ -15,7 +15,7 @@
 
 MStatus initializePlugin(MObject obj) {
 	MStatus status{};
-	MFnPlugin plugin{ obj, "Luca Di Sera", "1.1.0.6", "Any", &status };
+	MFnPlugin plugin{ obj, "Luca Di Sera", "1.1.0.17", "Any", &status };
 	CHECK_MSTATUS_AND_RETURN_IT(status);
 
 	status = plugin.registerNode(DeltaMush::typeName, DeltaMush::typeId, DeltaMush::creator, DeltaMush::initialize, MPxNode::kDeformerNode);

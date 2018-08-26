@@ -23,11 +23,13 @@ public:
 	inline ComponentVector256d() : x(_mm256_setzero_pd()), y(_mm256_setzero_pd()), z(_mm256_setzero_pd()) {}
 	inline ComponentVector256d(const __m256d xx, const __m256d yy, const __m256d zz) : x(xx), y(yy), z(zz) {}
 	inline ComponentVector256d(const double* xx, const double* yy, const double* zz) : x(_mm256_load_pd(xx)), y(_mm256_load_pd(yy)), z(_mm256_load_pd(zz)) {}
-	inline ComponentVector256d(const double* xx, const double* yy, const double* zz, size_t jumpSize) : 
-		x(_mm256_setr_pd(xx[0], xx[jumpSize], xx[jumpSize * 2], xx[jumpSize * 3])), 
-		y(_mm256_setr_pd(yy[0], yy[jumpSize], yy[jumpSize * 2], yy[jumpSize * 3])),
-		z(_mm256_setr_pd(zz[0], zz[jumpSize], zz[jumpSize * 2], zz[jumpSize * 3])) 
-	{}
+
+	// Set the components of the vector to the specified vectors
+	inline void set(const __m256d xx, const __m256d yy, const __m256d zz) {
+		x = xx;
+		y = yy;
+		z = zz;
+	}
 
 	// Set the components of the vector to zero
 	inline void setZero() { 
@@ -46,13 +48,32 @@ public:
 		*(this) *= factor;
 	}
 
+	// Matrix - vector product where this is treated as an Nx3 matrix row
+	inline __m256d asMatrixRowProduct(const ComponentVector256d& vector ) const {
+		return _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(this->x, vector.x), _mm256_mul_pd(this->y, vector.y)), _mm256_mul_pd(this->z, vector.z));
+	}
+
+	inline void store(double* out_x, double* out_y, double* out_z) const {
+		_mm256_store_pd(out_x, x);
+		_mm256_store_pd(out_y, y);
+		_mm256_store_pd(out_z, z);
+	}
+
 	/// ComponentVector256d - ComponentVector256d operators
-	inline ComponentVector256d operator+(const ComponentVector256d& other) { return ComponentVector256d(_mm256_add_pd(x, other.x), _mm256_add_pd(y, other.y), _mm256_add_pd(z, other.z)); }
-	inline ComponentVector256d operator-(const ComponentVector256d& other) { return ComponentVector256d(_mm256_sub_pd(x, other.x), _mm256_sub_pd(y, other.y), _mm256_sub_pd(z, other.z)); }
-	inline ComponentVector256d operator*(const ComponentVector256d& other) { return ComponentVector256d(_mm256_mul_pd(x, other.x), _mm256_mul_pd(y, other.y), _mm256_mul_pd(z, other.z)); }
+	inline ComponentVector256d operator+(const ComponentVector256d& other) const { return ComponentVector256d(_mm256_add_pd(x, other.x), _mm256_add_pd(y, other.y), _mm256_add_pd(z, other.z)); }
+	inline ComponentVector256d& operator+=(const ComponentVector256d& other) {
+		x = _mm256_add_pd(x, other.x);
+		y = _mm256_add_pd(y, other.y);
+		z = _mm256_add_pd(z, other.z);
+
+		return *this;
+	}
+
+	inline ComponentVector256d operator-(const ComponentVector256d& other) const { return ComponentVector256d(_mm256_sub_pd(x, other.x), _mm256_sub_pd(y, other.y), _mm256_sub_pd(z, other.z)); }
+	inline ComponentVector256d operator*(const ComponentVector256d& other) const { return ComponentVector256d(_mm256_mul_pd(x, other.x), _mm256_mul_pd(y, other.y), _mm256_mul_pd(z, other.z)); }
 
 	// The cross product operator
-	inline ComponentVector256d operator^(const ComponentVector256d& other) {
+	inline ComponentVector256d operator^(const ComponentVector256d& other) const {
 		return ComponentVector256d(
 			_mm256_sub_pd(_mm256_mul_pd(y, other.z), _mm256_mul_pd(z, other.y)),
 			_mm256_sub_pd(_mm256_mul_pd(z, other.x), _mm256_mul_pd(x, other.z)),
@@ -61,7 +82,7 @@ public:
 	}
 
 	/// ComponentVector256d - __m256d operators
-	inline ComponentVector256d operator*(const __m256d multiplier) { return ComponentVector256d(_mm256_mul_pd(x, multiplier), _mm256_mul_pd(y, multiplier), _mm256_mul_pd(z, multiplier)); }
+	inline ComponentVector256d operator*(const __m256d multiplier) const { return ComponentVector256d(_mm256_mul_pd(x, multiplier), _mm256_mul_pd(y, multiplier), _mm256_mul_pd(z, multiplier)); }
 	inline ComponentVector256d& operator*=(const __m256d multiplier) { 
 		x = _mm256_mul_pd(x, multiplier);
 		y = _mm256_mul_pd(y, multiplier);
@@ -70,7 +91,7 @@ public:
 		return *this;
 	}
 
-private:
+public:
 	__m256d x;
 	__m256d y;
 	__m256d z;
