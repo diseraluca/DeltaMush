@@ -26,5 +26,8 @@
     <ClInclude Include="DeltaMush.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ComponentVector256d.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

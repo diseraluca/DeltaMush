@@ -11,6 +11,8 @@
 #define _SCL_SECURE_NO_WARNINGS
 #include "DeltaMush.h"
 
+#include "ComponentVector256d.h"
+
 #include <maya/MFnTypedAttribute.h>
 #include <maya/MFnNumericAttribute.h>
 #include <maya/MGlobal.h>
