@@ -12,6 +12,7 @@
 #include "DeltaMush.h"
 
 #include "ComponentVector256d.h"
+#include "ComponentVector256dMatrix3x3.h"
 
 #include <maya/MFnTypedAttribute.h>
 #include <maya/MFnNumericAttribute.h>
@@ -240,6 +241,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	float envelopeValue{ block.inputValue(envelope).asFloat() };
 	double deltaWeightValue{ block.inputValue(deltaWeight).asDouble() };
 	ComponentVector256d delta{};
+	ComponentVector256dMatrix3x3 tangentSpaceMatrix{};
 
 	double * deltaXPtr{ &deltasX[0] };
 	double * deltaYPtr{ &deltasY[0] };
@@ -259,8 +261,8 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 				_mm256_setr_pd(smoothedZ[neighbourPtr[0]], smoothedZ[neighbourPtr[0 + 4]], smoothedZ[neighbourPtr[0 + 8]], smoothedZ[neighbourPtr[0 + 12]])
 			};
 
-			ComponentVector256d tangent{ neighbourPositions - smoothedPositions };
-			tangent.normalize();
+			tangentSpaceMatrix.tangent = neighbourPositions - smoothedPositions;
+			tangentSpaceMatrix.tangent.normalize();
 
 			neighbourPositions.set(
 				_mm256_setr_pd(smoothedX[neighbourPtr[1]], smoothedX[neighbourPtr[1 + 4]], smoothedX[neighbourPtr[1 + 8]], smoothedX[neighbourPtr[1 + 12]]),
@@ -268,14 +270,14 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 				_mm256_setr_pd(smoothedZ[neighbourPtr[1]], smoothedZ[neighbourPtr[1 + 4]], smoothedZ[neighbourPtr[1 + 8]], smoothedZ[neighbourPtr[1 + 12]])
 			);
 
-			ComponentVector256d normal{ neighbourPositions - smoothedPositions };
-			normal.normalize();
+			tangentSpaceMatrix.normal = neighbourPositions - smoothedPositions;
+			tangentSpaceMatrix.normal.normalize();
 
-			ComponentVector256d binormal{ tangent ^ normal };
-			normal = tangent ^ binormal;
+			tangentSpaceMatrix.binormal = tangentSpaceMatrix.tangent ^ tangentSpaceMatrix.normal;
+			tangentSpaceMatrix.normal = tangentSpaceMatrix.tangent ^ tangentSpaceMatrix.binormal;
 
 			ComponentVector256d cachedDelta{ deltaXPtr, deltaYPtr, deltaZPtr };
-			ComponentVector256d tangentSpaceDelta{ tangent.asMatrixRowProduct(cachedDelta), normal.asMatrixRowProduct(cachedDelta), binormal.asMatrixRowProduct(cachedDelta) };
+			ComponentVector256d tangentSpaceDelta{ tangentSpaceMatrix * cachedDelta };
 
 			delta += tangentSpaceDelta;
 		}
@@ -303,8 +305,6 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	resultPositions.setLength(vertexCount);
 	composePointArray(&resultsX[0], &resultsY[0], &resultsZ[0], resultPositions, vertexCount);
 	iterator.setAllPositions(resultPositions);
-
-	auto end = std::chrono::high_resolution_clock::now();
 
 	return MStatus::kSuccess;
 }
@@ -440,6 +440,7 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 	// Declare the data needed by the loop
 
 	ComponentVector256d delta{};
+	ComponentVector256dMatrix3x3 tangentSpaceMatrix{};
 
 	int* neighbourPtr{ &neighbours[0] };
 
@@ -458,8 +459,8 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 				_mm256_setr_pd(smoothedZ[neighbourPtr[0]], smoothedZ[neighbourPtr[0 + 4]], smoothedZ[neighbourPtr[0 + 8]], smoothedZ[neighbourPtr[0 + 12]])
 			};
 
-			ComponentVector256d tangent{ neighbourPositions - smoothedPositions };
-			tangent.normalize();
+			tangentSpaceMatrix.tangent = neighbourPositions - smoothedPositions;
+			tangentSpaceMatrix.tangent.normalize();
 
 			neighbourPositions.set(
 				_mm256_setr_pd(smoothedX[neighbourPtr[1]], smoothedX[neighbourPtr[1 + 4]], smoothedX[neighbourPtr[1 + 8]], smoothedX[neighbourPtr[1 + 12]]),
@@ -467,24 +468,18 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 				_mm256_setr_pd(smoothedZ[neighbourPtr[1]], smoothedZ[neighbourPtr[1 + 4]], smoothedZ[neighbourPtr[1 + 8]], smoothedZ[neighbourPtr[1 + 12]])
 			);
 
-			ComponentVector256d normal{ neighbourPositions - smoothedPositions };
-			normal.normalize();
+			tangentSpaceMatrix.normal = neighbourPositions - smoothedPositions;
+			tangentSpaceMatrix.normal.normalize();
 
-			ComponentVector256d binormal{ tangent ^ normal };
-			normal = tangent ^ binormal;
+			tangentSpaceMatrix.binormal = tangentSpaceMatrix.tangent ^ tangentSpaceMatrix.normal;
+			tangentSpaceMatrix.normal = tangentSpaceMatrix.tangent ^ tangentSpaceMatrix.binormal;
 
-			normal.normalize();
-			binormal.normalize();
+			tangentSpaceMatrix.normal.normalize();
+			tangentSpaceMatrix.binormal.normalize();
 
 			// Calculate the displacement Vector
-			__m256d resultX = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangent.x, delta.x), _mm256_mul_pd(normal.x, delta.y)), _mm256_mul_pd(binormal.x, delta.z));
-			__m256d resultY = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangent.y, delta.x), _mm256_mul_pd(normal.y, delta.y)), _mm256_mul_pd(binormal.y, delta.z));
-			__m256d resultZ = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangent.z, delta.x), _mm256_mul_pd(normal.z, delta.y)), _mm256_mul_pd(binormal.z, delta.z));
-
-
-			_mm256_store_pd(&deltasX[0] + (vertexIndex * 3) + (neighbourIndex * 4), resultX);
-			_mm256_store_pd(&deltasY[0] + (vertexIndex * 3) + (neighbourIndex * 4), resultY);
-			_mm256_store_pd(&deltasZ[0] + (vertexIndex * 3) + (neighbourIndex * 4), resultZ);
+			ComponentVector256d result{ tangentSpaceMatrix.inverseProduct(delta) };
+			result.store(&deltasX[0] + (vertexIndex * 3) + (neighbourIndex * 4), &deltasY[0] + (vertexIndex * 3) + (neighbourIndex * 4), &deltasZ[0] + (vertexIndex * 3) + (neighbourIndex * 4));
 		}
 	}
 
