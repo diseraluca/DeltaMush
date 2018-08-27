@@ -23,10 +23,11 @@
 #include <maya/MVector.h>
 #include <maya/MFnMesh.h>
 
+#include <vector>
+
 class DeltaMush : public MPxDeformerNode {
 public:
 	DeltaMush();
-	~DeltaMush();
 
 	static void*    creator();
 	static MStatus  initialize();
@@ -71,13 +72,13 @@ private:
 
 	unsigned int paddedCount;
 
-	double* verticesX;
-	double* verticesY;
-	double* verticesZ;
+	std::vector<double> verticesX;
+	std::vector<double> verticesY;
+	std::vector<double> verticesZ;
 
-	double* smoothedX;
-	double* smoothedY;
-	double* smoothedZ;
+	std::vector<double> smoothedX;
+	std::vector<double> smoothedY;
+	std::vector<double> smoothedZ;
 
 	std::vector<int> neighbours;
 

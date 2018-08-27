@@ -44,9 +44,9 @@ constexpr double DELTA_AVERAGE_FACTOR{ 1.0 / DeltaMush::DELTA_COUNT };
 DeltaMush::DeltaMush()
 	:isInitialized{ false },
 	 paddedCount{ 0 },
-	 verticesX{ nullptr },
-	 verticesY{ nullptr },
-	 verticesZ {nullptr },
+	 verticesX{},
+	 verticesY{},
+	 verticesZ{},
 	 neighbours{},
 	 deltasX{},
 	 deltasY{},
@@ -54,21 +54,6 @@ DeltaMush::DeltaMush()
 	 deltaMagnitudes{},
 	 perVertexWeights{}
 {
-}
-
-DeltaMush::~DeltaMush()
-{
-	if (verticesX) {
-		delete[] verticesX;
-		delete[] verticesY;
-		delete[] verticesZ;
-	}
-
-	if (smoothedX) {
-		delete[] smoothedX;
-		delete[] smoothedY;
-		delete[] smoothedZ;
-	}
 }
 
 void * DeltaMush::creator()
@@ -184,23 +169,14 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		referenceMeshVertexPositions.setLength(vertexCount);
 		referenceMeshFn.getPoints(referenceMeshVertexPositions);
 
-		if (verticesX) {
-			delete[] verticesX;
-			delete[] verticesY;
-			delete[] verticesZ;
-			delete[] smoothedX;
-			delete[] smoothedY;
-			delete[] smoothedZ;
-		}
+		verticesX.resize(paddedCount);
+		verticesY.resize(paddedCount);
+		verticesZ.resize(paddedCount);
+		decomposePointArray(referenceMeshVertexPositions, verticesX.data(), verticesY.data(), verticesZ.data(), vertexCount);
 
-		verticesX = new double[paddedCount]();
-		verticesY = new double[paddedCount]();
-		verticesZ = new double[paddedCount]();
-		decomposePointArray(referenceMeshVertexPositions, verticesX, verticesY, verticesZ, vertexCount);
-
-		smoothedX = new double[paddedCount]();
-		smoothedY = new double[paddedCount]();
-		smoothedZ = new double[paddedCount]();
+		smoothedX.resize(paddedCount);
+		smoothedY.resize(paddedCount);
+		smoothedZ.resize(paddedCount);
 
 		// Build the neighbours array 
 		getNeighbours(referenceMeshValue, vertexCount);
@@ -217,7 +193,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 
 	MPointArray meshVertexPositions{};
 	iterator.allPositions(meshVertexPositions);
-	decomposePointArray(meshVertexPositions, verticesX, verticesY, verticesZ, vertexCount);
+	decomposePointArray(meshVertexPositions, verticesX.data(), verticesY.data(), verticesZ.data(), vertexCount);
 
 	// Caculate the smoothed positions for the deformed mesh
 	MPointArray meshSmoothedPositions{};
@@ -252,7 +228,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	for (int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex += 4, neighbourPtr += 13) {
 		delta.setZero();
 
-		ComponentVector256d smoothedPositions{ smoothedX + vertexIndex, smoothedY + vertexIndex, smoothedZ + vertexIndex };
+		ComponentVector256d smoothedPositions{ smoothedX.data() + vertexIndex, smoothedY.data() + vertexIndex, smoothedZ.data() + vertexIndex };
 
 		for (unsigned int neighbourIndex{ 0 }; neighbourIndex < DELTA_COUNT; ++neighbourIndex, ++neighbourPtr, deltaXPtr += 4, deltaYPtr += 4, deltaZPtr += 4) {
 			ComponentVector256d neighbourPositions{
@@ -288,7 +264,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		delta *= _mm256_mul_pd(_mm256_load_pd(&deltaMagnitudes[vertexIndex]), _mm256_set1_pd(deltaWeightValue));
 
 		ComponentVector256d resultPositions{ delta + smoothedPositions };
-		ComponentVector256d vertexPositions{ verticesX + vertexIndex, verticesY + vertexIndex, verticesZ + vertexIndex };
+		ComponentVector256d vertexPositions{ verticesX.data() + vertexIndex, verticesY.data() + vertexIndex, verticesZ.data() + vertexIndex };
 
 		delta = resultPositions - vertexPositions;
 
@@ -368,14 +344,17 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 	out_smoothedPositions.setLength(vertexCount);
 
 	// A copy is necessary to avoid losing the original data trough the computations while working iteratively on the smoothed positions
-	double* verticesCopyX = new double[paddedCount];
-	std::copy(verticesX, verticesX + paddedCount, verticesCopyX);
+	//double* verticesCopyX = new double[paddedCount];
+	//std::copy(verticesX.data(), verticesX.data() + paddedCount, verticesCopyX);
 
-	double* verticesCopyY = new double[paddedCount];
-	std::copy(verticesY, verticesY + paddedCount, verticesCopyY);
+	//double* verticesCopyY = new double[paddedCount];
+	//std::copy(verticesY.data(), verticesY.data() + paddedCount, verticesCopyY);
 
-	double* verticesCopyZ = new double[paddedCount];
-	std::copy(verticesZ, verticesZ + paddedCount, verticesCopyZ);
+	//double* verticesCopyZ = new double[paddedCount];
+	//std::copy(verticesZ.data(), verticesZ.data() + paddedCount, verticesCopyZ);
+	std::vector<double> verticesCopyX{ verticesX };
+	std::vector<double> verticesCopyY{ verticesY };
+	std::vector<double> verticesCopyZ{ verticesZ };
 
 	//Declaring the data needed by the loop
 	//__m256d averageX;
@@ -406,25 +385,21 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 			__m256d averageFactorVec = _mm256_set1_pd(AVERAGE_FACTOR);
 			average *= averageFactorVec;
 
-			ComponentVector256d verticesCopyPositions{ verticesCopyX + vertexIndex, verticesCopyY + vertexIndex, verticesCopyZ + vertexIndex };
+			ComponentVector256d verticesCopyPositions{ verticesCopyX.data() + vertexIndex, verticesCopyY.data() + vertexIndex, verticesCopyZ.data() + vertexIndex };
 
 			average = (average - verticesCopyPositions) * weighVector + verticesCopyPositions;
-			average.store(smoothedX + vertexIndex, smoothedY + vertexIndex, smoothedZ + vertexIndex);
+			average.store(smoothedX.data() + vertexIndex, smoothedY.data() + vertexIndex, smoothedZ.data() + vertexIndex);
 
 		}
 
-		std::swap(smoothedX, verticesCopyX);
-		std::swap(smoothedY, verticesCopyY);
-		std::swap(smoothedZ, verticesCopyZ);
+		smoothedX.swap(verticesCopyX);
+		smoothedY.swap(verticesCopyY);
+		smoothedZ.swap(verticesCopyZ);
 	}
 
-	std::swap(smoothedX, verticesCopyX);
-	std::swap(smoothedY, verticesCopyY);
-	std::swap(smoothedZ, verticesCopyZ);
-
-	delete[] verticesCopyX;
-	delete[] verticesCopyY;
-	delete[] verticesCopyZ;
+	smoothedX.swap(verticesCopyX);
+	smoothedY.swap(verticesCopyY);
+	smoothedZ.swap(verticesCopyZ);
 
 	return MStatus::kSuccess;
 }
@@ -446,8 +421,8 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 
 	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex += 4, neighbourPtr += 13) {
 
-		ComponentVector256d smoothedPositions{ smoothedX + vertexIndex, smoothedY + vertexIndex, smoothedZ + vertexIndex };
-		delta = ComponentVector256d(verticesX + vertexIndex, verticesY + vertexIndex, verticesZ + vertexIndex) - smoothedPositions;
+		ComponentVector256d smoothedPositions{ smoothedX.data() + vertexIndex, smoothedY.data() + vertexIndex, smoothedZ.data() + vertexIndex };
+		delta = ComponentVector256d(verticesX.data() + vertexIndex, verticesY.data() + vertexIndex, verticesZ.data() + vertexIndex) - smoothedPositions;
 
 		_mm256_store_pd(&deltaMagnitudes[vertexIndex], delta.length());
 
