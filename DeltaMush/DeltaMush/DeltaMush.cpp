@@ -8,11 +8,13 @@
 //
 //
 // File : DeltaMush.cpp
+
 #define _SCL_SECURE_NO_WARNINGS
 #include "DeltaMush.h"
 
 #include "ComponentVector256d.h"
 #include "ComponentVector256dMatrix3x3.h"
+#include "MPointArrayUtils.h"
 
 #include <maya/MFnTypedAttribute.h>
 #include <maya/MFnNumericAttribute.h>
@@ -172,7 +174,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		verticesX.resize(paddedCount);
 		verticesY.resize(paddedCount);
 		verticesZ.resize(paddedCount);
-		decomposePointArray(referenceMeshVertexPositions, verticesX.data(), verticesY.data(), verticesZ.data(), vertexCount);
+		MPointArrayUtils::decomposePointArray(referenceMeshVertexPositions, verticesX.data(), verticesY.data(), verticesZ.data(), vertexCount);
 
 		smoothedX.resize(paddedCount);
 		smoothedY.resize(paddedCount);
@@ -193,7 +195,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 
 	MPointArray meshVertexPositions{};
 	iterator.allPositions(meshVertexPositions);
-	decomposePointArray(meshVertexPositions, verticesX.data(), verticesY.data(), verticesZ.data(), vertexCount);
+	MPointArrayUtils::decomposePointArray(meshVertexPositions, verticesX.data(), verticesY.data(), verticesZ.data(), vertexCount);
 
 	// Caculate the smoothed positions for the deformed mesh
 	MPointArray meshSmoothedPositions{};
@@ -279,29 +281,10 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 
 	MPointArray resultPositions{};
 	resultPositions.setLength(vertexCount);
-	composePointArray(&resultsX[0], &resultsY[0], &resultsZ[0], resultPositions, vertexCount);
+	MPointArrayUtils::composePointArray(&resultsX[0], &resultsY[0], &resultsZ[0], resultPositions, vertexCount);
 	iterator.setAllPositions(resultPositions);
 
 	return MStatus::kSuccess;
-}
-
-void DeltaMush::decomposePointArray(const MPointArray & points, double * out_x, double * out_y, double * out_z, unsigned int vertexCount)
-{
-	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; ++vertexIndex, ++out_x, ++out_y, ++out_z) {
-		out_x[0] = points[vertexIndex].x;
-		out_y[0] = points[vertexIndex].y;
-		out_z[0] = points[vertexIndex].z;
-	}
-}
-
-void DeltaMush::composePointArray(double * x, double * y, double * z, MPointArray & out_points, unsigned int vertexCount)
-{
-	for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; ++vertexIndex, ++x, ++y, ++z) {
-		out_points[vertexIndex].x = x[0];
-		out_points[vertexIndex].y = y[0];
-		out_points[vertexIndex].z = z[0];
-		out_points[vertexIndex].w = 1.0;
-	}
 }
 
 MStatus DeltaMush::getNeighbours(MObject & mesh, unsigned int vertexCount)

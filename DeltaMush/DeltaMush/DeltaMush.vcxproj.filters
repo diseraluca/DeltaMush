@@ -32,5 +32,8 @@
     <ClInclude Include="ComponentVector256dMatrix3x3.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="MPointArrayUtils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
