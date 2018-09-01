@@ -17,12 +17,14 @@
 #include <maya/MPointArray.h>
 
 namespace MPointArrayUtils {
-	inline void decomposePointArray(const MPointArray & points, double * out_x, double * out_y, double * out_z, unsigned int vertexCount)
+	inline void decomposePointArray(MPointArray & points, double * out_x, double * out_y, double * out_z, unsigned int vertexCount)
 	{
-		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; ++vertexIndex, ++out_x, ++out_y, ++out_z) {
-			out_x[0] = points[vertexIndex].x;
-			out_y[0] = points[vertexIndex].y;
-			out_z[0] = points[vertexIndex].z;
+		double* pointsPtr{ &points[0][0] };
+
+		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; ++vertexIndex, ++out_x, ++out_y, ++out_z, pointsPtr += 4) {
+			out_x[0] = pointsPtr[0];
+			out_y[0] = pointsPtr[1];
+			out_z[0] = pointsPtr[2];
 		}
 	}
 

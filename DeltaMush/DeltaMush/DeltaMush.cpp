@@ -9,7 +9,6 @@
 //
 // File : DeltaMush.cpp
 
-#define _SCL_SECURE_NO_WARNINGS
 #include "DeltaMush.h"
 
 #include "ComponentVector256d.h"
@@ -142,6 +141,7 @@ MStatus DeltaMush::preEvaluation(const MDGContext & context, const MEvaluationNo
 
 MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMatrix & matrix, unsigned int multiIndex)
 {
+	auto start = std::chrono::high_resolution_clock::now();
 	bool rebindMeshValue{ block.inputValue(rebindMesh).asBool() };
 	int smoothingIterationsValue{ block.inputValue(smoothingIterations).asInt() };
 	double smoothWeightValue{ block.inputValue(smoothWeight).asDouble() };
@@ -284,6 +284,14 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	MPointArrayUtils::composePointArray(&resultsX[0], &resultsY[0], &resultsZ[0], resultPositions, vertexCount);
 	iterator.setAllPositions(resultPositions);
 
+	auto end = std::chrono::high_resolution_clock::now();
+	time += (end - start);
+	count++;
+	if (count >= 100) {
+		MGlobal::displayInfo(MString() + std::chrono::duration_cast<std::chrono::microseconds>(time).count() + '\n');
+		count = 0;
+		time = time.zero();
+	}
 	return MStatus::kSuccess;
 }
 
@@ -326,23 +334,10 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 	unsigned int vertexCount{ verticesPositions.length() };
 	out_smoothedPositions.setLength(vertexCount);
 
-	// A copy is necessary to avoid losing the original data trough the computations while working iteratively on the smoothed positions
-	//double* verticesCopyX = new double[paddedCount];
-	//std::copy(verticesX.data(), verticesX.data() + paddedCount, verticesCopyX);
-
-	//double* verticesCopyY = new double[paddedCount];
-	//std::copy(verticesY.data(), verticesY.data() + paddedCount, verticesCopyY);
-
-	//double* verticesCopyZ = new double[paddedCount];
-	//std::copy(verticesZ.data(), verticesZ.data() + paddedCount, verticesCopyZ);
 	std::vector<double> verticesCopyX{ verticesX };
 	std::vector<double> verticesCopyY{ verticesY };
 	std::vector<double> verticesCopyZ{ verticesZ };
 
-	//Declaring the data needed by the loop
-	//__m256d averageX;
-	//__m256d averageY;
-	//__m256d averageZ;
 	ComponentVector256d average{};
 
 	__m256d weighVector{ _mm256_set1_pd(weight) };
