@@ -23,6 +23,16 @@ public:
 
 	// The product between a vector and the inverse of the matrix
 	inline ComponentVector256d inverseProduct(const ComponentVector256d& vector) {
+		__m256d length = _mm256_add_pd(_mm256_mul_pd(normal.x, normal.x), _mm256_add_pd(_mm256_mul_pd(normal.y, normal.y), _mm256_mul_pd(normal.z, normal.z)));
+		__m256d factor = _mm256_div_pd(_mm256_set1_pd(1.0), length);
+
+		normal *= factor;
+
+		length = _mm256_add_pd(_mm256_mul_pd(binormal.x, binormal.x), _mm256_add_pd(_mm256_mul_pd(binormal.y, binormal.y), _mm256_mul_pd(binormal.z, binormal.z)));
+		factor = _mm256_div_pd(_mm256_set1_pd(1.0), length);
+
+		binormal *= factor;
+
 		return ComponentVector256d(
 			_mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangent.x, vector.x), _mm256_mul_pd(normal.x, vector.y)), _mm256_mul_pd(binormal.x, vector.z)),
 			_mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(tangent.y, vector.x), _mm256_mul_pd(normal.y, vector.y)), _mm256_mul_pd(binormal.y, vector.z)),

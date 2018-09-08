@@ -427,9 +427,6 @@ MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPoint
 			tangentSpaceMatrix.binormal = tangentSpaceMatrix.tangent ^ tangentSpaceMatrix.normal;
 			tangentSpaceMatrix.normal = tangentSpaceMatrix.tangent ^ tangentSpaceMatrix.binormal;
 
-			tangentSpaceMatrix.normal.normalize();
-			tangentSpaceMatrix.binormal.normalize();
-
 			// Calculate the displacement Vector
 			ComponentVector256d result{ tangentSpaceMatrix.inverseProduct(delta) };
 			result.store(&deltasX[0] + (vertexIndex * 3) + (neighbourIndex * 4), &deltasY[0] + (vertexIndex * 3) + (neighbourIndex * 4), &deltasZ[0] + (vertexIndex * 3) + (neighbourIndex * 4));
