@@ -141,7 +141,6 @@ MStatus DeltaMush::preEvaluation(const MDGContext & context, const MEvaluationNo
 
 MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMatrix & matrix, unsigned int multiIndex)
 {
-	auto start = std::chrono::high_resolution_clock::now();
 	bool rebindMeshValue{ block.inputValue(rebindMesh).asBool() };
 	int smoothingIterationsValue{ block.inputValue(smoothingIterations).asInt() };
 	double smoothWeightValue{ block.inputValue(smoothWeight).asDouble() };
@@ -174,6 +173,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		verticesX.resize(paddedCount);
 		verticesY.resize(paddedCount);
 		verticesZ.resize(paddedCount);
+
 		MPointArrayUtils::decomposePointArray(referenceMeshVertexPositions, verticesX.data(), verticesY.data(), verticesZ.data(), vertexCount);
 
 		smoothedX.resize(paddedCount);
@@ -195,8 +195,16 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 
 	MPointArray meshVertexPositions{};
 	iterator.allPositions(meshVertexPositions);
+	auto start = std::chrono::high_resolution_clock::now();
 	MPointArrayUtils::decomposePointArray(meshVertexPositions, verticesX.data(), verticesY.data(), verticesZ.data(), vertexCount);
-
+	auto end = std::chrono::high_resolution_clock::now();
+	time += (end - start);
+	count++;
+	if (count >= 100) {
+		std::cout << std::chrono::duration_cast<std::chrono::microseconds>(time).count() << std::endl;
+		count = 0;
+		time = time.zero();
+	}
 	// Caculate the smoothed positions for the deformed mesh
 	MPointArray meshSmoothedPositions{};
 	averageSmoothing(meshVertexPositions, meshSmoothedPositions, smoothingIterationsValue, smoothWeightValue);
@@ -284,14 +292,6 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	MPointArrayUtils::composePointArray(&resultsX[0], &resultsY[0], &resultsZ[0], resultPositions, vertexCount);
 	iterator.setAllPositions(resultPositions);
 
-	auto end = std::chrono::high_resolution_clock::now();
-	time += (end - start);
-	count++;
-	if (count >= 100) {
-		MGlobal::displayInfo(MString() + std::chrono::duration_cast<std::chrono::microseconds>(time).count() + '\n');
-		count = 0;
-		time = time.zero();
-	}
 	return MStatus::kSuccess;
 }
 

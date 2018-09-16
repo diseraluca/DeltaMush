@@ -15,16 +15,21 @@
 #pragma once
 
 #include <maya/MPointArray.h>
+#include <immintrin.h>
 
 namespace MPointArrayUtils {
 	inline void decomposePointArray(MPointArray & points, double * out_x, double * out_y, double * out_z, unsigned int vertexCount)
 	{
 		double* pointsPtr{ &points[0][0] };
 
-		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; ++vertexIndex, ++out_x, ++out_y, ++out_z, pointsPtr += 4) {
-			out_x[0] = pointsPtr[0];
-			out_y[0] = pointsPtr[1];
-			out_z[0] = pointsPtr[2];
+		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; vertexIndex += 4, out_x += 4, out_y += 4, out_z += 4, pointsPtr += 16) {
+			__m256d xx = _mm256_setr_pd(pointsPtr[0], pointsPtr[0 + 4], pointsPtr[0 + 8], pointsPtr[0 + 12]);
+			__m256d yy = _mm256_setr_pd(pointsPtr[1], pointsPtr[1 + 4], pointsPtr[1 + 8], pointsPtr[1 + 12]);
+			__m256d zz = _mm256_setr_pd(pointsPtr[2], pointsPtr[2 + 4], pointsPtr[2 + 8], pointsPtr[2 + 12]);
+
+			_mm256_store_pd(out_x, xx);
+			_mm256_store_pd(out_y, yy);
+			_mm256_store_pd(out_z, zz);
 		}
 	}
 
