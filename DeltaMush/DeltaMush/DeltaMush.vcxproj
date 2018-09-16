@@ -154,7 +154,10 @@
     <ClCompile Include="pluginMain.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ComponentVector256d.h" />
+    <ClInclude Include="ComponentVector256dMatrix3x3.h" />
     <ClInclude Include="DeltaMush.h" />
+    <ClInclude Include="MPointArrayUtils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
