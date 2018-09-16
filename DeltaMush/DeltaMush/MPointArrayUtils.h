@@ -35,11 +35,13 @@ namespace MPointArrayUtils {
 
 	inline void composePointArray(double * x, double * y, double * z, MPointArray & out_points, unsigned int vertexCount)
 	{
-		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; ++vertexIndex, ++x, ++y, ++z) {
-			out_points[vertexIndex].x = x[0];
-			out_points[vertexIndex].y = y[0];
-			out_points[vertexIndex].z = z[0];
-			out_points[vertexIndex].w = 1.0;
+		double* pointsPtr{ &out_points[0][0] };
+
+		for (unsigned int vertexIndex{ 0 }; vertexIndex < vertexCount; ++vertexIndex, ++x, ++y, ++z, pointsPtr += 4) {
+			pointsPtr[0] = x[0];
+			pointsPtr[1] = y[0];
+			pointsPtr[2] = z[0];
+			pointsPtr[3] = 1.0;
 		}
 	}
 }

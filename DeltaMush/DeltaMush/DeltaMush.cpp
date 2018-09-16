@@ -195,16 +195,8 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 
 	MPointArray meshVertexPositions{};
 	iterator.allPositions(meshVertexPositions);
-	auto start = std::chrono::high_resolution_clock::now();
 	MPointArrayUtils::decomposePointArray(meshVertexPositions, verticesX.data(), verticesY.data(), verticesZ.data(), vertexCount);
-	auto end = std::chrono::high_resolution_clock::now();
-	time += (end - start);
-	count++;
-	if (count >= 100) {
-		std::cout << std::chrono::duration_cast<std::chrono::microseconds>(time).count() << std::endl;
-		count = 0;
-		time = time.zero();
-	}
+
 	// Caculate the smoothed positions for the deformed mesh
 	MPointArray meshSmoothedPositions{};
 	averageSmoothing(meshVertexPositions, meshSmoothedPositions, smoothingIterationsValue, smoothWeightValue);
@@ -289,7 +281,16 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 
 	MPointArray resultPositions{};
 	resultPositions.setLength(vertexCount);
+	auto start = std::chrono::high_resolution_clock::now();
 	MPointArrayUtils::composePointArray(&resultsX[0], &resultsY[0], &resultsZ[0], resultPositions, vertexCount);
+	auto end = std::chrono::high_resolution_clock::now();
+	time += (end - start);
+	count++;
+	if (count >= 100) {
+		std::cout << std::chrono::duration_cast<std::chrono::microseconds>(time).count() << std::endl;
+		count = 0;
+		time = time.zero();
+	}
 	iterator.setAllPositions(resultPositions);
 
 	return MStatus::kSuccess;
