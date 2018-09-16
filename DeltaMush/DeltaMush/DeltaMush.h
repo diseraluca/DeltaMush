@@ -24,7 +24,6 @@
 #include <maya/MFnMesh.h>
 
 #include <vector>
-#include <chrono>
 
 class DeltaMush : public MPxDeformerNode {
 public:
@@ -40,12 +39,12 @@ private:
 	// Get the neighbours vertices per-vertex of mesh. Stores them in the this->neighbours
 	MStatus getNeighbours(MObject& mesh, unsigned int vertexCount);
 
-	// Perform an average neighbour smoothing on the vertices in vertices position and stores the smoothedPositions in out_smoothedPositions.
-	MStatus averageSmoothing(const MPointArray& verticesPositions, MPointArray& out_smoothedPositions, unsigned int iterations, double weight);
+	// Perform an average neighbour smoothing on the vertices in vertices position and stores the results in this->smoothedXYZ.
+	MStatus averageSmoothing(unsigned int iterations, double weight, unsigned int vertexCount);
 
-	// Calculate the tangent space deltas between the smoothed positions and the original positions. Initializes this->deltas and stores
-	// the resulting deltas in it. Furthermore it initializes this->magnitude and store the respective magnitude in it.
-	MStatus cacheDeltas(const MPointArray& vertexPositions, const MPointArray& smoothedPositions, unsigned int vertexCount);
+	// Calculate the tangent space deltas between the smoothed positions and the original positions. Initializes this->deltasXYZ and stores
+	// the resulting deltas in it. Furthermore it initializes this->deltaMagnitudes and store the respective magnitudes in it.
+	MStatus cacheDeltas(unsigned int vertexCount);
 
 	// Retrieves the per-vertex weight of every vertex and stores them in this->perVertexWeight
 	MStatus getPerVertexWeights(MDataBlock& block, unsigned int multiIndex, unsigned int vertexCount);
@@ -61,9 +60,9 @@ public:
 	static MObject deltaWeight;
 
 public:
-	static const unsigned int MAX_NEIGHBOURS;;
+	static const unsigned int MAX_NEIGHBOURS;
 	static const unsigned int DELTA_COUNT;
-	static const double AVERAGE_FACTOR;
+	static const double AVERAGE_FACTOR; // Used to average the Smoothing knowing that the neighbours will always be MAX_NEIGHBOURS
 
 private:
 	bool isInitialized;
@@ -86,7 +85,4 @@ private:
 
 	std::vector<double> deltaMagnitudes;
 	std::vector<float> perVertexWeights;
-
-	int count;
-	std::chrono::duration<double> time;
 };

@@ -184,11 +184,10 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 		getNeighbours(referenceMeshValue, vertexCount);
 
 		// Calculate the smoothed positions for the reference mesh
-		MPointArray referenceMeshSmoothedPositions{};
-		averageSmoothing(referenceMeshVertexPositions, referenceMeshSmoothedPositions, smoothingIterationsValue, smoothWeightValue);
+		averageSmoothing(smoothingIterationsValue, smoothWeightValue, vertexCount);
 
 		// Calculate and cache the deltas
-		cacheDeltas(referenceMeshVertexPositions, referenceMeshSmoothedPositions, vertexCount);
+		cacheDeltas(vertexCount);
 
 		isInitialized = true;
 	}
@@ -198,8 +197,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 	MPointArrayUtils::decomposePointArray(meshVertexPositions, verticesX.data(), verticesY.data(), verticesZ.data(), vertexCount);
 
 	// Caculate the smoothed positions for the deformed mesh
-	MPointArray meshSmoothedPositions{};
-	averageSmoothing(meshVertexPositions, meshSmoothedPositions, smoothingIterationsValue, smoothWeightValue);
+	averageSmoothing(smoothingIterationsValue, smoothWeightValue, vertexCount);
 
 	// Apply the deltas
 	std::vector<double> resultsX{};
@@ -281,16 +279,7 @@ MStatus DeltaMush::deform(MDataBlock & block, MItGeometry & iterator, const MMat
 
 	MPointArray resultPositions{};
 	resultPositions.setLength(vertexCount);
-	auto start = std::chrono::high_resolution_clock::now();
 	MPointArrayUtils::composePointArray(&resultsX[0], &resultsY[0], &resultsZ[0], resultPositions, vertexCount);
-	auto end = std::chrono::high_resolution_clock::now();
-	time += (end - start);
-	count++;
-	if (count >= 100) {
-		std::cout << std::chrono::duration_cast<std::chrono::microseconds>(time).count() << std::endl;
-		count = 0;
-		time = time.zero();
-	}
 	iterator.setAllPositions(resultPositions);
 
 	return MStatus::kSuccess;
@@ -330,11 +319,8 @@ MStatus DeltaMush::getNeighbours(MObject & mesh, unsigned int vertexCount)
 	return MStatus::kSuccess;
 }
 
-MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPointArray & out_smoothedPositions, unsigned int iterations, double weight)
+MStatus DeltaMush::averageSmoothing(unsigned int iterations, double weight, unsigned int vertexCount)
 {
-	unsigned int vertexCount{ verticesPositions.length() };
-	out_smoothedPositions.setLength(vertexCount);
-
 	std::vector<double> verticesCopyX{ verticesX };
 	std::vector<double> verticesCopyY{ verticesY };
 	std::vector<double> verticesCopyZ{ verticesZ };
@@ -383,7 +369,7 @@ MStatus DeltaMush::averageSmoothing(const MPointArray & verticesPositions, MPoin
 	return MStatus::kSuccess;
 }
 
-MStatus DeltaMush::cacheDeltas(const MPointArray & vertexPositions, const MPointArray & smoothedPositions, unsigned int vertexCount)
+MStatus DeltaMush::cacheDeltas(unsigned int vertexCount)
 {
 	deltaMagnitudes.resize(paddedCount);
 
